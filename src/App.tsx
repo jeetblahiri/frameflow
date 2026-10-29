@@ -801,6 +801,7 @@ export default function App() {
             setFocusMode={(v) => setShowCanvas(!v)}
           >
             <Presentation
+              expanded={focusMode}
               canvasRef={canvasRef}
               web={web}
               presenter={engine.presenter}

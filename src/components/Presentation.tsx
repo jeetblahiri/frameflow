@@ -25,6 +25,7 @@ interface Props {
   width: number;
   state: RecordingState;
   onExpand: () => void;
+  expanded: boolean;
 }
 export function Presentation({
   web,
@@ -43,6 +44,7 @@ export function Presentation({
   width,
   state,
   onExpand,
+  expanded,
 }: Props) {
   const preview = useRef<HTMLCanvasElement>(null);
   const border = useRef<HTMLDivElement>(null);
@@ -96,7 +98,7 @@ export function Presentation({
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, []);
+  }, [expanded]);
   useEffect(() => {
     if (composition.camera.background === 'remove' && camera) presenter.enable();
     else presenter.dispose();
