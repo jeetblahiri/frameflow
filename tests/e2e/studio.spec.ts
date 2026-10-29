@@ -227,17 +227,39 @@ test('surfaces denied permissions and opens websites in a live mobile viewport',
   await page.getByLabel('Content URL').fill('https://www.youtube.com/watch?v=example');
   await page.getByRole('button', { name: 'Add to library' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Your website, in frame.' })).toBeVisible();
+  await expect(page.locator('iframe.mobile-webpage')).toHaveCount(0);
+  await page.getByText('More options', { exact: true }).click();
+  await page.getByRole('button', { name: 'Try embedded view' }).click();
   await expect(page.locator('iframe.mobile-webpage')).toHaveAttribute(
     'src',
     'https://www.youtube.com/watch?v=example',
   );
-  await expect(page.getByRole('button', { name: 'Connect website capture' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect embedded capture' })).toBeVisible();
   await page.getByRole('button', { name: 'Start recording', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Connect website capture');
+  await expect(page.getByRole('alert')).toContainText('Open the live browser');
 });
 test('restores recoverable recording chunks after an interrupted session', async ({ page }) => {
   await start(page);
-  await page.waitForTimeout(2400);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const request = indexedDB.open('frameflow-studio', 1);
+          const db = await new Promise<IDBDatabase>(
+            (resolve) => (request.onsuccess = () => resolve(request.result)),
+          );
+          return new Promise<number>((resolve) => {
+            const pending = db.transaction('recovery').objectStore('recovery').get('pending');
+            pending.onsuccess = () => {
+              resolve(pending.result?.chunks || 0);
+              db.close();
+            };
+          });
+        }),
+      { timeout: 15000 },
+    )
+    .toBeGreaterThan(0);
   page.on('dialog', (d) => d.accept());
   await page.reload();
   await expect(page.getByText('Your last take was interrupted.')).toBeVisible();
@@ -269,6 +291,11 @@ test('supports tablet and portrait layouts with a fixed vertical output and anno
   await page.mouse.move(b!.x + b!.width * 0.7, b!.y + b!.height * 0.3, { steps: 8 });
   await page.mouse.up();
   await expect(page.getByRole('button', { name: 'Undo last annotation' })).toBeEnabled();
+  const before = (await page.getByTestId('composition').boundingBox())!;
+  await page.getByRole('button', { name: 'Toggle distraction-free view' }).click();
+  const expanded = (await page.getByTestId('composition').boundingBox())!;
+  expect(expanded.width).toBeGreaterThan(before.width + 20);
+  await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeVisible();
 });
 
 test('mixes local video, an imported audio track and microphone without resetting the take', async ({
@@ -602,6 +629,8 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
   await page.getByRole('button', { name: 'From a link' }).click();
   await page.getByLabel('Content URL').fill('https://mobile.frameflow.test/');
   await page.getByRole('button', { name: 'Add to library' }).click();
+  await page.getByText('More options', { exact: true }).click();
+  await page.getByRole('button', { name: 'Try embedded view' }).click();
   const frame = page.frameLocator('iframe.mobile-webpage');
   await frame.getByLabel('Your name').fill('Frameflow');
   // Keyboard input avoids Chromium's emulated-viewport hit-testing quirk for scaled OOPIFs.
@@ -611,8 +640,8 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
   expect(await frame.locator('body').evaluate(() => innerWidth)).toBe(390);
   await frame.locator('body').evaluate(() => window.scrollTo(0, 1100));
   expect(await frame.locator('body').evaluate(() => scrollY)).toBeGreaterThan(1000);
-  await page.getByRole('button', { name: 'Connect website capture' }).click();
-  await expect(page.getByRole('button', { name: 'Disconnect capture' })).toBeVisible();
+  await page.getByRole('button', { name: 'Connect embedded capture' }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
   await expect
     .poll(() =>
       page
@@ -640,7 +669,73 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
   );
   await expect(page.getByRole('button', { name: 'Resume recording' })).toBeVisible();
   await page.getByRole('button', { name: 'Resume recording' }).click();
-  await expect(page.getByRole('alert')).toContainText('Reconnect website capture');
+  await expect(page.getByRole('alert')).toContainText('Reconnect your live browser');
   await page.getByRole('button', { name: 'Finish recording' }).click();
   await expect(page.getByLabel('Recording preview')).toBeVisible();
+});
+
+test('uses a light readable studio and real mobile browsing for a site that refuses iframe embedding', async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await page.route('**/browser-config.json', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ endpoint: 'http://127.0.0.1:4317' }),
+    }),
+  );
+  await page.reload();
+  const theme = await page.locator('.app-header').evaluate((el) => ({
+    background: getComputedStyle(el).backgroundColor,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+  }));
+  expect(theme.background).toBe('rgb(255, 255, 255)');
+  expect(theme.scheme).toBe('light');
+  await page.getByRole('button', { name: 'Import content', exact: true }).click();
+  await page.getByRole('button', { name: 'From a link' }).click();
+  await page.getByLabel('Content URL').fill('http://127.0.0.1:4321');
+  await page.getByRole('button', { name: 'Add to library' }).click();
+  await expect(page.locator('iframe.mobile-webpage')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open live browser', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Reload website' })).toBeVisible({
+    timeout: 30000,
+  });
+  const color = () =>
+    page
+      .getByTestId('composition')
+      .evaluate((canvas: HTMLCanvasElement) =>
+        Array.from(canvas.getContext('2d')!.getImageData(540, 1200, 1, 1).data).slice(0, 3),
+      );
+  const delta = async (expected: number[]) =>
+    (await color()).reduce((sum, value, i) => sum + Math.abs(value - expected[i]), 0);
+  await expect.poll(() => delta([68, 187, 136])).toBeLessThan(20);
+  let box = (await page.getByTestId('composition').boundingBox())!;
+  // Click and type through the actual streamed browser. No synthetic website events or mocked frames.
+  await page.mouse.click(box.x + (box.width * 100) / 390, box.y + (box.height * 122) / 693);
+  await expect.poll(() => delta([240, 180, 94])).toBeLessThan(20);
+  await page.mouse.click(box.x + (box.width * 110) / 390, box.y + (box.height * 197) / 693);
+  await page.keyboard.type('Frameflow');
+  await expect.poll(() => delta([204, 136, 238])).toBeLessThan(20);
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6);
+  await page.mouse.wheel(0, 1100);
+  await expect.poll(() => delta([238, 68, 136])).toBeLessThan(20);
+  await page.getByRole('button', { name: 'Pen (P)', exact: true }).click();
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: 'Undo last annotation' })).toBeEnabled();
+  await start(page);
+  await page.waitForTimeout(1300);
+  await page.getByRole('button', { name: 'Finish recording' }).click();
+  const video = page.getByLabel('Recording preview');
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(1080);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoHeight)).toBe(1920);
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByText('More options', { exact: true }).click();
+  await page.getByRole('button', { name: 'Readable article view' }).click();
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your website, in frame.' })).toBeVisible();
 });

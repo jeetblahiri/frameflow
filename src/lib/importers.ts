@@ -3,6 +3,7 @@ import { openPdf } from '../engine/pdf';
 import type { Asset, Project } from '../model';
 import { uid } from '../model';
 import { getMedia, putMedia, putMediaBatch } from './storage';
+import { normalizeWebsiteUrl } from './urls';
 import { validateProject } from './project-validation';
 import { openArchive, readArchiveEntry, PROJECT_ARCHIVE_LIMIT, METADATA_LIMIT } from './archive';
 
@@ -205,11 +206,7 @@ export async function importFile(file: File): Promise<Asset[]> {
   return adapter.import(file);
 }
 export async function importUrl(input: string): Promise<Asset[]> {
-  const url = new URL(input);
-  if (url.username || url.password)
-    throw new Error('Use a website URL without embedded credentials.');
-  if (!['https:', 'http:'].includes(url.protocol))
-    throw new Error('Use a complete HTTP or HTTPS link.');
+  const url = normalizeWebsiteUrl(input);
   if (/\.(png|jpe?g|webp|gif|svg|pdf|mp4|webm|mp3)(\?|$)/i.test(url.pathname)) {
     try {
       const response = await fetch(url.href, { mode: 'cors', credentials: 'omit' });

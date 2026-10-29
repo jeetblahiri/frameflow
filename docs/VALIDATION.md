@@ -6,8 +6,8 @@ Validated on 29 October 2026. This release is prepared for static HTTPS deployme
 
 - Strict TypeScript compilation: pass.
 - Production static build: pass. The app and bundled assets also load beneath a `/frameflow/` repository subpath.
-- Twenty-one unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
-- Fourteen production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
+- Twenty-three frontend unit tests and three browser-service network tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
+- Fifteen production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
 - Desktop visual inspection at 1440 × 960: pass; screenshot in `docs/studio.png`.
 - Viewport checks at 1024 × 768, 768 × 1024, and 390 × 844: output remains 9:16, no horizontal document overflow, annotation controls work. These use a desktop engine and pointer input, not Safari or Apple Pencil.
 
@@ -15,11 +15,13 @@ The newest local Chrome 156 / Playwright browser had a native rendering stall ev
 
 ## Live website and presenter checks
 
-- The studio starts with the content library, canvas board and inspector closed. Each is reachable from the navigation bar.
+- The studio defaults to a light color scheme with a white header, readable controls, and a clear preview. The content library, canvas board and inspector start closed. Each is reachable from the navigation bar.
 - Shared presenter settings retain enabled state, position, scale and cutout mode through scene changes and reload. A pixel regression checks that camera pixels remain in the next scene.
 - The production background-removal worker loads its local WASM/model under the enforced CSP. A real sample portrait smoke check retained the person and produced transparent background pixels; no camera uploads occur.
 - A controlled live website confirms a 390 px inner viewport, form input, button interaction, page scrolling, annotation switching, capture compositing, and pause on sharing loss. Automated permission/stream behavior is deterministic; native Region Capture was additionally checked in a visible Brave/Chromium window, with the scrolled page color verified in the recording canvas. Element Capture was rejected after native testing produced stale whole-tab frames; the final implementation uses the verified Region Capture path.
-- Actual website compatibility depends on the site's embedding policy and responsive CSS. Mobile user-agent emulation, scroll-anchored DOM annotations, website audio, physical-device cutout quality and long-session thermal behavior are not claimed.
+- A real browser-service regression uses a website with X-Frame-Options: DENY and frame-ancestors none. Actual streamed pixels verify mobile layout, trusted pointer input, keyboard typing, scrolling, local annotations and a playable vertical export without iframe embedding or a mocked screen source. The reported ScienceAlert article also rendered and scrolled in a local smoke test.
+- Recovery checks wait for a committed checkpoint before simulating interruption; empty interrupted sessions no longer advertise a recoverable take.
+- Website audio, automatic scroll-anchored DOM marks, physical-device certification and long-session thermal behavior are not claimed. The optional cloud connection must be enabled explicitly; default configuration remains off.
 
 ## Production hardening
 
@@ -75,7 +77,7 @@ Before describing the app as iPad validated, record the exact device model, iPad
 
 - MP4 uses browser-native encoding only. There is no cross-browser MP4 conversion service.
 - Browser-level recording and background suspension behavior cannot be overridden.
-- Live webpages use a 390 px responsive iframe. Embedded recording needs desktop Chromium Region Capture and tab-sharing permission. Sites may refuse embedding; separate-tab sharing is available, with interaction in the source tab. Marks remain fixed to the frame. Tab audio is not included.
+- Optional real mobile browsing uses a separate isolated service with 4½-minute sessions and roughly 5–8 page frames per second. Local camera/composition rendering remains at a requested 30 fps. Tab sharing and iframe embedding are alternatives, with the destination site and browser restrictions still enforced.
 - PPTX imports text; PDF preserves presentation visuals.
 - Presenter background removal is bundled and processed locally at up to 15 fps; automatic captions are not included.
 - GIF decoding is bounded to avoid unbounded live-animation memory. Large animations should be converted to local video.

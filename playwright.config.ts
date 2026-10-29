@@ -46,12 +46,26 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  webServer: {
-    command: production
-      ? 'node scripts/serve-built.mjs'
-      : 'npm run dev -- --port 5173 --strictPort',
-    url: baseURL,
-    reuseExistingServer: !production && !process.env.CI,
-    timeout: 30000,
-  },
+  webServer: [
+    {
+      command: 'node tests/browser-fixture.mjs',
+      url: 'http://127.0.0.1:4321',
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'node browser-service/server.mjs',
+      url: 'http://127.0.0.1:4317/health',
+      env: { FRAMEFLOW_BROWSER_TEST: '1' },
+      reuseExistingServer: false,
+      timeout: 30000,
+    },
+    {
+      command: production
+        ? 'node scripts/serve-built.mjs'
+        : 'npm run dev -- --port 5173 --strictPort',
+      url: baseURL,
+      reuseExistingServer: !production && !process.env.CI,
+      timeout: 30000,
+    },
+  ],
 });

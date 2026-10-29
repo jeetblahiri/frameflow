@@ -131,7 +131,7 @@ export function ImportDialog({
               .then((a) => {
                 onAssets(a);
                 if (a[0]?.kind === 'webpage')
-                  notify('Live mobile webpage added. Use Interact to scroll and Annotate to draw.');
+                  notify('Website added. Choose how to open it in your frame.');
                 onClose();
               })
               .catch((e) => setError(e.message))
@@ -143,8 +143,9 @@ export function ImportDialog({
             <input
               required
               aria-label="Content URL"
-              type="url"
-              placeholder="https://…"
+              type="text"
+              inputMode="url"
+              placeholder="Website URL, e.g. sciencealert.com/…"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />
@@ -152,9 +153,9 @@ export function ImportDialog({
           <div className="info-box">
             <Link2 size={18} />
             <p>
-              Websites open live in a 390 px mobile viewport. Some sites block embedding; use a
-              separate tab for those. Recording a live page needs tab-sharing permission in desktop
-              Chrome or Edge.
+              Open websites in an interactive mobile browser inside your frame, including sites that
+              block embedding. You can also share an existing browser tab. Your camera and imported
+              files stay on this device.
             </p>
           </div>
           <button className="primary full" disabled={busy || !url}>

@@ -7,7 +7,7 @@ export const contentSecurityPolicy = [
   "font-src 'self' data: blob:",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
-  "connect-src 'self' blob: data: https: http:",
+  "connect-src 'self' blob: data: https: http: wss: ws://127.0.0.1:4317 ws://localhost:4317",
   "object-src 'none'",
   'frame-src https: http:',
   "base-uri 'self'",

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "functions": {
+    "api/browser.mjs": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/browser" }]
+}

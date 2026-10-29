@@ -129,8 +129,6 @@ export function DeviceSettings({
                       camera: {
                         ...c.camera,
                         shape,
-                        x: shape === 'wide' ? 0.05 : c.camera.x,
-                        size: shape === 'wide' ? 0.9 : c.camera.size > 0.6 ? 0.29 : c.camera.size,
                       },
                     }))
                   }

@@ -56,7 +56,7 @@ function drawLayer(
   W: number,
   H: number,
   media: MediaLibrary,
-  webSource?: HTMLVideoElement,
+  webSource?: HTMLVideoElement | HTMLCanvasElement,
 ) {
   const x = layer.x * W,
     y = layer.y * H,
@@ -100,8 +100,18 @@ function drawLayer(
       ctx.lineTo(w * 0.65, h * 0.7);
       ctx.stroke();
     } else ctx.fillRect(w * 0.1, h * 0.1, w * 0.8, h * 0.8);
-  } else if (asset.kind === 'webpage' && webSource && webSource.readyState >= 2) {
-    const r = imageRect(webSource.videoWidth, webSource.videoHeight, w, h, 'contain');
+  } else if (
+    asset.kind === 'webpage' &&
+    webSource &&
+    (!(webSource instanceof HTMLVideoElement) || webSource.readyState >= 2)
+  ) {
+    const r = imageRect(
+      webSource instanceof HTMLVideoElement ? webSource.videoWidth : webSource.width,
+      webSource instanceof HTMLVideoElement ? webSource.videoHeight : webSource.height,
+      w,
+      h,
+      'contain',
+    );
     ctx.drawImage(webSource, r.x, r.y, r.w, r.h);
   } else if (asset.kind === 'link' || asset.kind === 'webpage') {
     ctx.fillStyle = '#e7e9db';
@@ -230,12 +240,20 @@ export function drawComposition(
   assets: Asset[],
   media: MediaLibrary,
   camera?: HTMLVideoElement | HTMLCanvasElement | ImageBitmap,
-  options?: { overlayOnly?: boolean; webSource?: HTMLVideoElement; capturedFrame?: boolean },
+  options?: {
+    overlayOnly?: boolean;
+    webSource?: HTMLVideoElement | HTMLCanvasElement;
+    capturedFrame?: boolean;
+  },
 ) {
   const W = ctx.canvas.width,
     H = ctx.canvas.height;
   ctx.clearRect(0, 0, W, H);
-  if (options?.capturedFrame && options.webSource && options.webSource.readyState >= 2) {
+  if (
+    options?.capturedFrame &&
+    options.webSource &&
+    (!(options.webSource instanceof HTMLVideoElement) || options.webSource.readyState >= 2)
+  ) {
     // Region Capture already includes the on-screen presenter and annotations exactly once.
     ctx.drawImage(options.webSource, 0, 0, W, H);
     return;

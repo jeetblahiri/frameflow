@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { LockKeyhole, Maximize, MousePointer2 } from 'lucide-react';
+import {
+  LockKeyhole,
+  Maximize,
+  MousePointer2,
+  Globe2,
+  LoaderCircle,
+  MonitorUp,
+} from 'lucide-react';
 import type { Annotation, Asset, Composition, Point, RecordingState, Tool } from '../model';
 import { clamp, uid } from '../model';
 import { cameraHeight, drawComposition } from '../engine/composition';
@@ -47,7 +54,7 @@ export function Presentation({
   const preview = useRef<HTMLCanvasElement>(null);
   const border = useRef<HTMLDivElement>(null);
   const [displayWidth, setDisplayWidth] = useState(300);
-  const [interact, setInteract] = useState(true);
+  const { interact, setInteract } = web;
   useEffect(() => {
     if (tool !== 'select') setInteract(false);
   }, [tool]);
@@ -55,7 +62,15 @@ export function Presentation({
     .reverse()
     .find((l) => assets.find((a) => a.id === l.assetId)?.kind === 'webpage');
   const webAsset = assets.find((a) => a.id === webLayer?.assetId);
-  const embedded = !!webAsset && web.mode !== 'tab';
+  const embedded = !!webAsset && web.view === 'embed' && web.mode !== 'tab';
+  const boundWeb = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (web.mode === 'remote' && webAsset) {
+      if (boundWeb.current && boundWeb.current !== webAsset.id)
+        web.remote.send({ type: 'navigate', url: webAsset.url });
+      boundWeb.current = webAsset.id;
+    } else if (web.mode === 'off') boundWeb.current = undefined;
+  }, [webAsset?.id, web.mode, web.remote.send]);
   const latest = useRef({ composition, assets, camera, web, embedded });
   latest.current = { composition, assets, camera, web, embedded };
   useEffect(() => {
@@ -73,7 +88,9 @@ export function Presentation({
   const transition = useRef<{ canvas: HTMLCanvasElement; time: number } | undefined>(undefined);
   const gesture = useRef<
     | {
-        kind: 'draw' | 'pan' | 'camera' | 'resize';
+        kind: 'draw' | 'pan' | 'camera' | 'resize' | 'remote';
+        touch?: boolean;
+        last?: Point;
         camSize?: number;
         start: Point;
         annotation?: Annotation;
@@ -108,7 +125,7 @@ export function Presentation({
               ? presenter.draw(d.camera, now)
               : d.camera || undefined;
           drawComposition(ctx, d.composition, d.assets, media, source, {
-            webSource: d.web.video,
+            webSource: d.web.source,
             capturedFrame: d.embedded && d.web.mode === 'embedded',
           });
           const t = transition.current;
@@ -147,6 +164,36 @@ export function Presentation({
       pressure: e.pressure,
     };
   };
+  const remotePoint = (p: Point) => ({
+    x: clamp(((p.x - (webLayer?.x || 0)) / (webLayer?.w || 1)) * 390, 0, 389),
+    y: clamp(((p.y - (webLayer?.y || 0)) / (webLayer?.h || 1)) * 693, 0, 692),
+  });
+  useEffect(() => {
+    const el = preview.current;
+    if (!el) return;
+    const wheel = (event: WheelEvent) => {
+      const d = latest.current;
+      if (
+        d.web.mode !== 'remote' ||
+        !d.web.interact ||
+        !d.composition.layers.some(
+          (l) => d.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+        )
+      )
+        return;
+      event.preventDefault();
+      const rect = el.getBoundingClientRect();
+      d.web.remote.send({
+        type: 'scroll',
+        x: (390 * (event.clientX - rect.left)) / rect.width,
+        y: (693 * (event.clientY - rect.top)) / rect.height,
+        dx: event.deltaX,
+        dy: event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 693 : 1),
+      });
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, []);
   const erase = (p: Point) =>
     update((c) => ({ ...c, annotations: c.annotations.filter((a) => !hitsAnnotation(a, p)) }));
   return (
@@ -160,50 +207,6 @@ export function Presentation({
           9:16 <LockKeyhole size={10} />
         </span>
       </div>
-      {webAsset && (
-        <div className="web-controls">
-          <div className="segmented">
-            <button
-              className={interact ? 'active' : ''}
-              onClick={() => {
-                setInteract(true);
-              }}
-            >
-              Interact
-            </button>
-            <button className={!interact ? 'active' : ''} onClick={() => setInteract(false)}>
-              Annotate / move
-            </button>
-          </div>
-          {web.mode === 'off' ? (
-            <button
-              disabled={web.busy}
-              className="secondary"
-              onClick={() => void web.connect('embedded')}
-            >
-              {web.busy ? 'Connecting…' : 'Connect website capture'}
-            </button>
-          ) : (
-            <button className="secondary" onClick={web.stop}>
-              Disconnect capture
-            </button>
-          )}
-          <details>
-            <summary>Page options</summary>
-            <p>
-              Live responsive layout · 390 px. Scroll, tap and type in Interact mode. Marks stay
-              fixed to the frame. Choose this Frameflow tab when connecting capture. Desktop Chrome
-              / Edge required for embedded recording.
-            </p>
-            <a href={webAsset.url} target="_blank" rel="noreferrer">
-              Open website ↗
-            </a>
-            <button disabled={web.busy} onClick={() => void web.connect('tab')}>
-              Share another tab (for sites blocking embeds)
-            </button>
-          </details>
-        </div>
-      )}
       <div
         className="output-border"
         ref={(element) => {
@@ -221,25 +224,26 @@ export function Presentation({
             height: `${(webLayer?.h || 1) * 100}%`,
           }}
         >
-          {assets
-            .filter((a) => a.kind === 'webpage')
-            .map((a) => (
-              <iframe
-                key={a.id}
-                src={a.url}
-                title={`Live mobile website: ${a.name}`}
-                className="mobile-webpage"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                allow="camera 'none'; microphone 'none'; geolocation 'none'; display-capture 'none'; payment 'none'"
-                referrerPolicy="no-referrer"
-                style={{
-                  display: a.id === webAsset?.id ? 'block' : 'none',
-                  width: 390,
-                  height: (((390 * 16) / 9) * (webLayer?.h || 1)) / (webLayer?.w || 1),
-                  transform: `scale(${(displayWidth * (webLayer?.w || 1)) / 390})`,
-                }}
-              />
-            ))}
+          {web.view === 'embed' &&
+            assets
+              .filter((a) => a.kind === 'webpage')
+              .map((a) => (
+                <iframe
+                  key={a.id}
+                  src={a.url}
+                  title={`Live mobile website: ${a.name}`}
+                  className="mobile-webpage"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  allow="camera 'none'; microphone 'none'; geolocation 'none'; display-capture 'none'; payment 'none'"
+                  referrerPolicy="no-referrer"
+                  style={{
+                    display: a.id === webAsset?.id ? 'block' : 'none',
+                    width: 390,
+                    height: (((390 * 16) / 9) * (webLayer?.h || 1)) / (webLayer?.w || 1),
+                    transform: `scale(${(displayWidth * (webLayer?.w || 1)) / 390})`,
+                  }}
+                />
+              ))}
         </div>
         <canvas
           ref={canvasRef}
@@ -250,6 +254,47 @@ export function Presentation({
         />
         <canvas
           ref={preview}
+          tabIndex={web.mode === 'remote' && interact ? 0 : -1}
+          onPaste={(e) => {
+            if (web.mode !== 'remote' || !interact || !webAsset) return;
+            e.preventDefault();
+            e.stopPropagation();
+            web.remote.send({
+              type: 'text',
+              text: e.clipboardData.getData('text/plain').slice(0, 2000),
+            });
+          }}
+          onKeyDown={(e) => {
+            if (web.mode !== 'remote' || !interact || !webAsset) return;
+            e.stopPropagation();
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+              e.preventDefault();
+              web.remote.send({ type: 'key', key: 'ControlOrMeta+A' });
+            } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+              e.preventDefault();
+              web.remote.send({ type: 'text', text: e.key });
+            } else if (
+              [
+                'Enter',
+                'Backspace',
+                'Delete',
+                'Tab',
+                'ArrowLeft',
+                'ArrowRight',
+                'ArrowUp',
+                'ArrowDown',
+                'Escape',
+                'Home',
+                'End',
+              ].includes(e.key)
+            ) {
+              e.preventDefault();
+              web.remote.send({
+                type: 'key',
+                key: e.key === 'Tab' && e.shiftKey ? 'Shift+Tab' : e.key,
+              });
+            }
+          }}
           width={width}
           height={(width * 16) / 9}
           data-testid="composition"
@@ -262,6 +307,21 @@ export function Presentation({
             if (e.button !== 0) return;
             e.currentTarget.setPointerCapture(e.pointerId);
             const p = point(e);
+            if (web.mode === 'remote' && interact && webAsset) {
+              e.currentTarget.focus({ preventScroll: true });
+              gesture.current = {
+                kind: 'remote',
+                touch: e.pointerType === 'touch',
+                start: p,
+                last: p,
+                panX: 0,
+                panY: 0,
+                camX: 0,
+                camY: 0,
+              };
+              if (e.pointerType !== 'touch') web.remote.send({ type: 'down', ...remotePoint(p) });
+              return;
+            }
             const c = composition;
             const layer = c.layers.at(-1);
             if (tool === 'eraser') {
@@ -320,13 +380,23 @@ export function Presentation({
           onPointerMove={(e) => {
             if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
             const p = point(e);
-            if (tool === 'eraser') {
+            if (tool === 'eraser' && gesture.current?.kind !== 'remote') {
               erase(p);
               return;
             }
             const g = gesture.current;
             if (!g) return;
-            if (g.kind === 'pan')
+            if (g.kind === 'remote') {
+              if (g.touch)
+                web.remote.send({
+                  type: 'scroll',
+                  ...remotePoint(p),
+                  dx: 0,
+                  dy: ((g.last?.y || p.y) - p.y) * 693,
+                });
+              else web.remote.send({ type: 'move', ...remotePoint(p) });
+              g.last = p;
+            } else if (g.kind === 'pan')
               update((c) => ({
                 ...c,
                 layers: c.layers.map((l, i) =>
@@ -366,13 +436,81 @@ export function Presentation({
               }));
             }
           }}
-          onPointerUp={() => {
+          onPointerUp={(e) => {
+            const g = gesture.current;
+            if (g?.kind === 'remote') {
+              const p = point(e);
+              if (g.touch && Math.hypot(p.x - g.start.x, p.y - g.start.y) < 0.02)
+                web.remote.send({ type: 'down', ...remotePoint(p) });
+              web.remote.send({ type: 'up', ...remotePoint(p) });
+            }
             gesture.current = undefined;
           }}
           onPointerCancel={() => {
+            if (gesture.current?.kind === 'remote')
+              web.remote.send({
+                type: 'up',
+                ...remotePoint(gesture.current.last || gesture.current.start),
+              });
             gesture.current = undefined;
           }}
         />
+        {webAsset && !embedded && web.mode !== 'remote' && web.mode !== 'tab' && (
+          <div className="website-empty">
+            <span className="website-empty-icon">
+              <Globe2 size={28} />
+            </span>
+            <h2>
+              {web.remote.status === 'connecting'
+                ? 'Opening your website…'
+                : web.remote.status === 'error'
+                  ? 'Let’s reconnect your page.'
+                  : 'Your website, in frame.'}
+            </h2>
+            <p>
+              {web.remote.message ||
+                (web.remote.available
+                  ? 'Open an interactive mobile browser. Scroll, click and type, then switch to annotation.'
+                  : 'Open this website in a browser tab, then share the tab here to annotate and record it.')}
+            </p>
+            {web.remote.available ? (
+              <button
+                className="primary"
+                disabled={web.remote.status === 'connecting'}
+                onClick={() => web.connectBrowser(webAsset.url!)}
+              >
+                {web.remote.status === 'connecting' ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : (
+                  <Globe2 size={16} />
+                )}{' '}
+                {web.remote.status === 'error' ? 'Retry live browser' : 'Open live browser'}
+              </button>
+            ) : (
+              <a className="primary" href={webAsset.url} target="_blank" rel="noreferrer">
+                Open website ↗
+              </a>
+            )}
+            <button
+              className="secondary"
+              disabled={web.busy}
+              onClick={() => void web.connect('tab')}
+            >
+              <MonitorUp size={15} />
+              Share website tab
+            </button>
+            {web.remote.available && (
+              <a className="website-original" href={webAsset.url} target="_blank" rel="noreferrer">
+                Open original website ↗
+              </a>
+            )}
+            <small>
+              {web.remote.available
+                ? 'Temporary cloud browser · Camera & files stay local'
+                : 'Camera & imported files stay on this device'}
+            </small>
+          </div>
+        )}
         {composition.camera.enabled &&
           camera &&
           tool === 'select' &&

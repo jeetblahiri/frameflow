@@ -58,6 +58,7 @@ import { useWebCapture } from './hooks/useWebCapture';
 import { Library } from './components/Library';
 import { SpatialCanvas } from './components/SpatialCanvas';
 import { Presentation } from './components/Presentation';
+import { WebsiteControls } from './components/WebsiteControls';
 import { Teleprompter } from './components/Teleprompter';
 import { DeviceSettings, FocusSettings } from './components/Settings';
 import { CompositionThumb } from './components/Preview';
@@ -98,7 +99,7 @@ export default function App() {
     [moreTools, setMoreTools] = useState(false),
     [hand, setHand] = useState(false),
     [tool, setTool] = useState<Tool>('select'),
-    [color, setColor] = useState('#d4ee99'),
+    [color, setColor] = useState('#6554cb'),
     [strokeWidth, setStrokeWidth] = useState(0.007),
     [outputWidth, setOutputWidth] = useState(1080),
     [busy, setBusy] = useState(false),
@@ -470,7 +471,7 @@ export default function App() {
               (l) => latest.project?.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
             )
           )
-            notify('Reconnect website capture before resuming this take.', 'error');
+            notify('Reconnect your live browser or website tab before resuming.', 'error');
           else engine.recorder.resume();
         }
       }
@@ -526,7 +527,7 @@ export default function App() {
   const locked = engine.state !== 'idle';
   return (
     <div
-      className={`app-shell studio-v3 ${!leftOpen || focusMode ? 'left-collapsed' : ''} ${!rightOpen || focusMode ? 'right-collapsed' : ''} ${focusMode ? 'distraction-free' : ''}`}
+      className={`app-shell studio-v3 studio-v4 ${!leftOpen || focusMode ? 'left-collapsed' : ''} ${!rightOpen || focusMode ? 'right-collapsed' : ''} ${focusMode ? 'distraction-free' : ''}`}
       onDragEnter={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -749,7 +750,8 @@ export default function App() {
           <div className="stage-top">
             <div>
               <span className="stage-status-dot" />
-              Canvas<span className="stage-slash">/</span>
+              {showCanvas ? 'Canvas' : 'Preview'}
+              <span className="stage-slash">/</span>
               <strong>{active.name}</strong>
             </div>
             <div>
@@ -766,6 +768,21 @@ export default function App() {
               </button>
             </div>
           </div>
+          {composition.layers.some(
+            (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+          ) && (
+            <WebsiteControls
+              asset={project.assets.find(
+                (a) =>
+                  a.id ===
+                  [...composition.layers]
+                    .reverse()
+                    .find((l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage')
+                    ?.assetId,
+              )!}
+              web={web}
+            />
+          )}
           <SpatialCanvas
             project={project}
             update={update}
@@ -1076,7 +1093,10 @@ export default function App() {
                     ? composition.layers.some(
                         (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
                       ) && web.mode === 'off'
-                      ? notify('Reconnect website capture before resuming this take.', 'error')
+                      ? notify(
+                          'Reconnect your live browser or website tab before resuming.',
+                          'error',
+                        )
                       : engine.recorder.resume()
                     : engine.recorder.pause()
                 }
@@ -1102,7 +1122,7 @@ export default function App() {
                         (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
                       ) && web.mode === 'off'
                     ? notify(
-                        'Connect website capture above the frame before recording this live page.',
+                        'Open the live browser or share a website tab before recording.',
                         'error',
                       )
                     : composition.camera.enabled &&
@@ -1187,7 +1207,7 @@ export default function App() {
               ) &&
               web.mode === 'off'
             ) {
-              notify('Reconnect website capture before starting this take.', 'error');
+              notify('Reconnect your live browser or website tab before recording.', 'error');
               return;
             }
             if (canvasRef.current) {
@@ -1372,7 +1392,15 @@ export default function App() {
               {recovery.chunks} saved chunks · {formatTime(recovery.duration)}
             </small>
           </span>
-          <button onClick={() => void recover()}>
+          <button
+            disabled={!recovery.chunks}
+            title={
+              recovery.chunks
+                ? undefined
+                : 'No checkpoint was saved before the interruption. Discard this empty session to record again.'
+            }
+            onClick={() => void recover()}
+          >
             Recover take
             <ArrowRight size={14} />
           </button>

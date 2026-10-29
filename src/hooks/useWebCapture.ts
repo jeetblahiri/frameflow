@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useWebsiteBrowser } from './useWebsiteBrowser';
 interface CroppedTrack extends MediaStreamTrack {
   cropTo?: (target: unknown) => Promise<void>;
 }
@@ -13,6 +14,9 @@ export function useWebCapture(
   const video = useRef<HTMLVideoElement | undefined>(undefined);
   const stream = useRef<MediaStream | undefined>(undefined);
   const [mode, setMode] = useState<'off' | 'embedded' | 'tab'>('off');
+  const [view, setView] = useState<'browser' | 'embed' | 'tab'>('browser');
+  const [interact, setInteract] = useState(true);
+  const remote = useWebsiteBrowser(onLost);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
   const callbacks = useRef({ onLost, notify });
@@ -40,6 +44,8 @@ export function useWebCapture(
     };
   }, []);
   const connect = async (kind: 'embedded' | 'tab') => {
+    remote.disconnect();
+    setView(kind === 'tab' ? 'tab' : 'embed');
     const crop = (window as CaptureWindow).CropTarget;
     if (!navigator.mediaDevices?.getDisplayMedia || (kind === 'embedded' && !crop)) {
       callbacks.current.notify(
@@ -143,10 +149,22 @@ export function useWebCapture(
   return {
     target,
     video: video.current,
-    mode,
+    mode: remote.status === 'ready' ? ('remote' as const) : mode,
+    source: remote.status === 'ready' ? remote.frame : video.current,
+    remote,
+    view,
+    setView,
+    interact,
+    setInteract,
+    connectBrowser: (url: string) => {
+      stop();
+      setView('browser');
+      remote.connect(url);
+    },
     busy,
     connect,
     stop: () => {
+      remote.disconnect();
       stop();
       callbacks.current.onLost();
     },
