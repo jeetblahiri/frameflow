@@ -8,7 +8,7 @@ Repository: https://github.com/jeetblahiri/frameflow
 
 1. In the repository's **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the source. This is a one-time repository administration action; the workflow's standard `GITHUB_TOKEN` cannot enable Pages itself.
 2. Push to `main`, or manually run **Validate and deploy Frameflow** from Actions.
-3. The workflow audits dependencies, checks TypeScript, runs unit tests, and runs browser workflows against the compiled app under `/frameflow/` with its production content policy enforced.
+3. The workflow pins Ubuntu 24.04 for supported browser dependencies, audits dependencies, checks TypeScript, runs unit tests, and runs browser workflows against the compiled app under `/frameflow/` with its production content policy enforced.
 4. Only after all checks pass does the deployment job publish that same `dist/` artifact. Pull requests never deploy. Browser evidence is retained for seven days.
 5. Follow the `github-pages` environment link shown by the deployment job. The expected default URL is https://jeetblahiri.github.io/frameflow/; verify the workflow and actual HTTP response before treating it as live.
 
