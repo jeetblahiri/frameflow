@@ -29,7 +29,10 @@ createServer(async (req, res) => {
   res.setHeader('Content-Security-Policy', `${policy}; frame-ancestors 'none'`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), display-capture=(self)');
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(self), microphone=(self), display-capture=(self), captured-surface-control=(self)',
+  );
   res.setHeader('X-Frame-Options', 'DENY');
   try {
     const path = new URL(req.url, 'http://localhost').pathname;

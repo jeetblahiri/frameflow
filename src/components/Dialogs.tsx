@@ -153,9 +153,9 @@ export function ImportDialog({
           <div className="info-box">
             <Link2 size={18} />
             <p>
-              Open websites in an interactive mobile browser inside your frame, including sites that
-              block embedding. You can also share an existing browser tab. Your camera and imported
-              files stay on this device.
+              Open a website in a narrow browser window, then share that tab into your frame. This
+              works with sites that block embedding. The website, camera, files and recording stay
+              in your browser.
             </p>
           </div>
           <button className="primary full" disabled={busy || !url}>

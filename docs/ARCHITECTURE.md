@@ -2,7 +2,7 @@
 
 ## The recording contract
 
-The output is an independent canvas, not a screenshot of the editor. Every recorded visual is drawn by `drawComposition`; local-media scenes exclude editor DOM by construction. Live website scenes use an explicit permission-driven Region Capture of the visible output frame, including its iframe and overlay canvas. Output dimensions never depend on workspace pan/zoom or responsive CSS dimensions.
+The output is an independent canvas, not a screenshot of the editor. Every recorded visual is drawn by `drawComposition`; local-media scenes exclude editor DOM by construction. Website scenes composite a local shared-tab video with presenter and marks. Opt-in embedded mode uses explicit permission-driven Region Capture of the visible output frame, including its iframe and overlay canvas. Output dimensions never depend on workspace pan/zoom or responsive CSS dimensions.
 
 Four coordinate spaces have separate ownership:
 
@@ -15,13 +15,11 @@ Four coordinate spaces have separate ownership:
 
 ## Live websites and presenter processing
 
-`useWebsiteBrowser` owns an optional WebSocket connection to the isolated browser service and a bounded latest-frame canvas. The service uses a real Chromium mobile context at 390 × 693 CSS pixels, a mobile user agent and 2× pixel density. Explicit viewport screenshots follow page scrolling and avoid native screencast emulation cropping errors. The client decodes at most one frame at a time and closes ImageBitmaps immediately after drawing. This canvas is composited with local presenter/annotations at the normal output resolution.
+`useWebCapture` owns browser-native sharing, its muted decoding video, and an optional CaptureController. It opens a narrow local website window on an explicit click with noopener/noreferrer, then requests a browser-tab source through getDisplayMedia on a separate click. It does not fetch, proxy or host webpages. Window sizing is a browser hint and does not override the website's user agent.
 
-Interact routes pointer, wheel, touch scrolling, keyboard and pasted text to narrowly defined browser commands. Annotation mode keeps gestures local. Website navigation, reader view, retry, disconnect and errors are surfaced in a toolbar outside the output. Sharing/session loss pauses a take. The optional article view rebuilds only text and validated HTTP/HTTPS images; source HTML and event handlers are not copied. The exact reported ScienceAlert article was tested locally through rendering, scrolling and a playable annotated export.
+When Captured Surface Control is available, **Scroll here** invokes `forwardWheel(previewCanvas)` directly from a click so the browser can ask for permission. It forwards actual wheel gestures to the shared tab without DOM access to the third-party website. Annotation mode, a drawing tool, disconnect and unmount call `forwardWheel(null)`. Generation counters invalidate pending capture and scroll requests. Permission denial or lack of support leaves the video source available with source-window scrolling instructions. Clicks, typing and page controls stay in the original website window. Capture is bound to the selected website asset; presenting a different website disconnects the old source and pauses a take. Website source changes do not recreate the local recorder.
 
-The frontend defaults to no cloud endpoint. If configured in `public/browser-config.json`, users explicitly start a browser session. The service uses fresh context storage per connection, a 270-second limit, origin/rate/concurrency bounds and a validated-IP egress proxy. It has no access to client camera, microphone, files or recordings. Authentication/verification restrictions on the destination website remain in force.
-
-Local tab sharing remains in `useWebCapture`. Optional iframe mode is selected explicitly and still respects frame-ancestors/X-Frame-Options; iframe load events are not treated as proof that an external site rendered. Region Capture narrows embedded captures to the visible output border and validates decoded dimensions before recording. The preview does not display its own captured stream, preventing a feedback loop. In that mode the recording canvas copies the crop without applying presenter/marks twice. The normal browser service requires no DOM/tab capture and works through the ordinary compositor.
+Optional iframe mode is selected explicitly and respects frame-ancestors/X-Frame-Options. Iframe load events are not treated as proof that an external site rendered. Region Capture narrows embedded captures to the visible output border and validates decoded dimensions before recording. The preview does not display its own captured stream, preventing a feedback loop. In that mode the recording canvas copies the crop without applying presenter/marks twice. Shared-tab mode uses the ordinary compositor with the camera and annotations drawn once. Sharing loss pauses an active take. No backend, cloud browser or session configuration is included.
 
 `PresenterProcessor` bounds background-removal work to one transferred frame at a time in a classic worker. MediaPipe's pinned local model and WASM generate alpha-masked frames at up to 15 fps and a maximum 640-pixel source width; the 30 fps compositor reuses the last complete frame. The worker closes input and replaced output bitmaps. Loading/failure status is surfaced and original camera pixels are never silently substituted while removal is selected.
 
@@ -62,6 +60,6 @@ A `.frameflow` file is a ZIP with `project.json` and `media/<blob-key>`. Import 
 
 - Add another import adapter with its own file validation and renderer support.
 - Add migrations before increasing the project/database schema version.
-- Add native MP4 conversion as an explicit optional module or service; preserve the source file and report progress/errors.
+- Add browser-local MP4 conversion as an explicit optional module; preserve the source file and report progress/errors.
 - Move expensive PDF/GIF preprocessing into workers if profiling identifies contention.
 - A native wrapper can reuse project, presentation, scene, and import models while replacing device/encoder bindings.

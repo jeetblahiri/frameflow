@@ -237,7 +237,7 @@ test('surfaces denied permissions and opens websites in a live mobile viewport',
   );
   await expect(page.getByRole('button', { name: 'Connect embedded capture' })).toBeVisible();
   await page.getByRole('button', { name: 'Start recording', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Open the live browser');
+  await expect(page.getByRole('alert')).toContainText('Share the website tab');
 });
 test('restores recoverable recording chunks after an interrupted session', async ({ page }) => {
   await start(page);
@@ -669,73 +669,137 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
   );
   await expect(page.getByRole('button', { name: 'Resume recording' })).toBeVisible();
   await page.getByRole('button', { name: 'Resume recording' }).click();
-  await expect(page.getByRole('alert')).toContainText('Reconnect your live browser');
+  await expect(page.getByRole('alert')).toContainText('Reconnect website sharing');
   await page.getByRole('button', { name: 'Finish recording' }).click();
   await expect(page.getByLabel('Recording preview')).toBeVisible();
 });
 
-test('uses a light readable studio and real mobile browsing for a site that refuses iframe embedding', async ({
+// This regression verifies permission/state handling with deterministic local pixels.
+// tests/native/website.spec.ts additionally verifies the real tab and forwardWheel API.
+test('keeps website capture local and handles native scroll permission, annotations, and sharing loss', async ({
   page,
 }) => {
-  test.setTimeout(90000);
-  await page.route('**/browser-config.json', (route) =>
-    route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({ endpoint: 'http://127.0.0.1:4317' }),
-    }),
-  );
-  await page.reload();
-  const theme = await page.locator('.app-header').evaluate((el) => ({
-    background: getComputedStyle(el).backgroundColor,
-    scheme: getComputedStyle(document.documentElement).colorScheme,
-  }));
-  expect(theme.background).toBe('rgb(255, 255, 255)');
-  expect(theme.scheme).toBe('light');
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
+  await page.evaluate(() => {
+    const state = {
+      calls: [] as (string | null)[],
+      deny: false,
+      options: {} as Record<string, unknown>,
+    };
+    Object.assign(window, { localCaptureTest: state });
+    class Controller {
+      setFocusBehavior(value: string) {
+        if (value !== 'no-focus-change') throw new Error('Unexpected focus change');
+      }
+      async forwardWheel(element: HTMLElement | null) {
+        state.calls.push(element?.dataset.testid || null);
+        if (element && state.deny) throw new DOMException('Denied', 'NotAllowedError');
+      }
+    }
+    Object.defineProperty(window, 'CaptureController', { value: Controller, configurable: true });
+    navigator.mediaDevices.getDisplayMedia = async (options) => {
+      state.options = options as Record<string, unknown>;
+      if (!(state.options.controller instanceof Controller))
+        throw new Error('Missing native controller');
+      const canvas = document.createElement('canvas');
+      canvas.width = 430;
+      canvas.height = 765;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#44bb88';
+      const timer = setInterval(() => ctx.fillRect(0, 0, 430, 765), 33);
+      const stream = canvas.captureStream(30);
+      stream.getVideoTracks()[0].getSettings = () => ({ displaySurface: 'browser' });
+      stream.getVideoTracks()[0].addEventListener('ended', () => clearInterval(timer));
+      Object.assign(window, { localCaptureStream: stream });
+      return stream;
+    };
+  });
   await page.getByRole('button', { name: 'Import content', exact: true }).click();
   await page.getByRole('button', { name: 'From a link' }).click();
-  await page.getByLabel('Content URL').fill('http://127.0.0.1:4321');
+  await page
+    .getByLabel('Content URL')
+    .fill(
+      'sciencealert.com/this-woman-lived-24-years-without-knowing-she-was-missing-her-entire-cerebellum',
+    );
   await page.getByRole('button', { name: 'Add to library' }).click();
   await expect(page.locator('iframe.mobile-webpage')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open live browser', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Reload website' })).toBeVisible({
-    timeout: 30000,
-  });
-  const color = () =>
-    page
-      .getByTestId('composition')
-      .evaluate((canvas: HTMLCanvasElement) =>
-        Array.from(canvas.getContext('2d')!.getImageData(540, 1200, 1, 1).data).slice(0, 3),
-      );
-  const delta = async (expected: number[]) =>
-    (await color()).reduce((sum, value, i) => sum + Math.abs(value - expected[i]), 0);
-  await expect.poll(() => delta([68, 187, 136])).toBeLessThan(20);
-  let box = (await page.getByTestId('composition').boundingBox())!;
-  // Click and type through the actual streamed browser. No synthetic website events or mocked frames.
-  await page.mouse.click(box.x + (box.width * 100) / 390, box.y + (box.height * 122) / 693);
-  await expect.poll(() => delta([240, 180, 94])).toBeLessThan(20);
-  await page.mouse.click(box.x + (box.width * 110) / 390, box.y + (box.height * 197) / 693);
-  await page.keyboard.type('Frameflow');
-  await expect.poll(() => delta([204, 136, 238])).toBeLessThan(20);
-  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6);
-  await page.mouse.wheel(0, 1100);
-  await expect.poll(() => delta([238, 68, 136])).toBeLessThan(20);
+  await expect(
+    page.getByRole('link', { name: 'Open as a regular tab ↗', exact: true }),
+  ).toHaveAttribute(
+    'href',
+    'https://sciencealert.com/this-woman-lived-24-years-without-knowing-she-was-missing-her-entire-cerebellum',
+  );
+  await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  const calls = () =>
+    page.evaluate(
+      () =>
+        (window as Window & { localCaptureTest?: { calls: (string | null)[] } }).localCaptureTest!
+          .calls,
+    );
+  await page.getByRole('button', { name: 'Scroll here' }).click();
+  await expect(page.locator('.website-hint')).toContainText('Scroll over the frame');
+  expect(await calls()).toContain('composition');
   await page.getByRole('button', { name: 'Pen (P)', exact: true }).click();
-  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.5);
+  await expect.poll(async () => (await calls()).at(-1)).toBeNull();
+  const box = (await page.getByTestId('composition').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.4);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5, { steps: 10 });
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.4, { steps: 10 });
   await page.mouse.up();
   await expect(page.getByRole('button', { name: 'Undo last annotation' })).toBeEnabled();
+  // Denying scroll control preserves the shared video and still permits recording.
+  await page.evaluate(() => {
+    (window as Window & { localCaptureTest?: { deny: boolean } }).localCaptureTest!.deny = true;
+  });
+  await page.getByRole('button', { name: 'Scroll here' }).click();
+  await expect(page.getByRole('alert')).toContainText('Sharing continues');
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
   await start(page);
   await page.waitForTimeout(1300);
+  await page.evaluate(() => {
+    (window as Window & { localCaptureStream?: MediaStream })
+      .localCaptureStream!.getVideoTracks()[0]
+      .dispatchEvent(new Event('ended'));
+  });
+  await expect(page.getByRole('button', { name: 'Resume recording' })).toBeVisible();
+  await page.getByRole('button', { name: 'Resume recording' }).click();
+  await expect(page.getByRole('alert')).toContainText('Reconnect website sharing');
   await page.getByRole('button', { name: 'Finish recording' }).click();
-  const video = page.getByLabel('Recording preview');
-  await expect(video).toBeVisible();
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(1080);
-  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoHeight)).toBe(1920);
-  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
-  await page.getByText('More options', { exact: true }).click();
-  await page.getByRole('button', { name: 'Readable article view' }).click();
-  await page.waitForTimeout(1200);
+  await expect(page.getByLabel('Recording preview')).toBeVisible();
+  expect(requests.some((url) => /browser-config|4317|vercel|wss?:/.test(url))).toBe(false);
+  expect(
+    requests
+      .filter((url) => /^https?:/.test(url))
+      .every((url) => new URL(url).origin === new URL(page.url()).origin),
+  ).toBe(true);
+});
+
+test('preserves local tab sharing when captured surface control is unavailable', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'CaptureController', { value: undefined, configurable: true });
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 430;
+      canvas.height = 765;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#44bb88';
+      setInterval(() => ctx.fillRect(0, 0, 430, 765), 33);
+      const stream = canvas.captureStream(30);
+      stream.getVideoTracks()[0].getSettings = () => ({ displaySurface: 'browser' });
+      return stream;
+    };
+  });
+  await page.getByRole('button', { name: 'Import content', exact: true }).click();
+  await page.getByRole('button', { name: 'From a link' }).click();
+  await page.getByLabel('Content URL').fill('https://example.com');
+  await page.getByRole('button', { name: 'Add to library' }).click();
+  await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Scroll here' })).toBeDisabled();
+  await expect(page.locator('.website-hint')).toContainText('Scroll in the source window');
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your website, in frame.' })).toBeVisible();
 });

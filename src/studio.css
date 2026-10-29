@@ -695,16 +695,6 @@ body {
   padding: 7px 9px;
   font-size: 11px;
 }
-.browser-navigation {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.browser-navigation button {
-  color: #737b8e;
-  padding: 6px;
-  border-radius: 5px;
-}
 .website-options {
   position: relative;
   font-size: 11px;
@@ -789,9 +779,6 @@ body {
   line-height: 1.6;
   margin-top: 5px;
 }
-.mobile-browser-input {
-  display: none;
-}
 @media (max-width: 900px) {
   .website-controls {
     gap: 8px;
@@ -836,12 +823,6 @@ body {
   }
   .website-empty small {
     display: none;
-  }
-  .mobile-browser-input {
-    display: block;
-    width: 100%;
-    padding: 8px;
-    font-size: 12px;
   }
 }
 .studio-v4 .scene-navigation > .icon-button {
@@ -1026,4 +1007,12 @@ body {
   .website-idle .website-actions {
     width: auto;
   }
+}
+
+.website-hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: #59677a;
+  font-size: 11px;
+  line-height: 1.5;
 }

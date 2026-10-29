@@ -471,7 +471,7 @@ export default function App() {
               (l) => latest.project?.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
             )
           )
-            notify('Reconnect your live browser or website tab before resuming.', 'error');
+            notify('Reconnect website sharing before resuming.', 'error');
           else engine.recorder.resume();
         }
       }
@@ -1093,10 +1093,7 @@ export default function App() {
                     ? composition.layers.some(
                         (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
                       ) && web.mode === 'off'
-                      ? notify(
-                          'Reconnect your live browser or website tab before resuming.',
-                          'error',
-                        )
+                      ? notify('Reconnect website sharing before resuming.', 'error')
                       : engine.recorder.resume()
                     : engine.recorder.pause()
                 }
@@ -1121,10 +1118,7 @@ export default function App() {
                   : composition.layers.some(
                         (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
                       ) && web.mode === 'off'
-                    ? notify(
-                        'Open the live browser or share a website tab before recording.',
-                        'error',
-                      )
+                    ? notify('Share the website tab before recording.', 'error')
                     : composition.camera.enabled &&
                         engine.cameraOn &&
                         composition.camera.background === 'remove' &&
@@ -1207,7 +1201,7 @@ export default function App() {
               ) &&
               web.mode === 'off'
             ) {
-              notify('Reconnect your live browser or website tab before recording.', 'error');
+              notify('Reconnect website sharing before recording.', 'error');
               return;
             }
             if (canvasRef.current) {

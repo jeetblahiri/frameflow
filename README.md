@@ -4,7 +4,7 @@
 
 A local-first spatial studio for educational Reels, Shorts, and vertical video. Arrange source material on an infinite canvas, frame it independently, explain it with your camera and microphone, and record one continuous composition.
 
-Frameflow is a browser recording studio built with React, TypeScript, Vite, Canvas 2D, Web Audio, MediaRecorder, and IndexedDB. Local recording needs no account or API key. An optional isolated browser service powers interactive websites without iframe restrictions.
+Frameflow is a browser recording studio built with React, TypeScript, Vite, Canvas 2D, Web Audio, MediaRecorder, and IndexedDB. Everything runs in the browser, including website tab capture, recording, annotations, background removal and storage. No application backend, account or API key is needed.
 
 ![Frameflow creator studio](docs/studio.png)
 
@@ -51,31 +51,40 @@ The studio autosaves the current project locally. Recordings and per-second reco
 
 ## Supported content
 
-| Content                            | Import and presentation                                                                                                |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| PNG, JPEG, WebP, AVIF, screenshots | Original local pixels, independent fit/fill/zoom/pan                                                                   |
-| SVG                                | Plain, self-contained SVG; scripts, HTML and external references rejected                                              |
-| GIF                                | Decoded animation frames; bounded decoding budget; use video for large animations                                      |
-| PDF                                | PDF.js rendering with page navigation; save multiple views of the same document                                        |
-| Local video                        | Browser-decodable codecs, playback and audio through the shared mixer                                                  |
-| Local audio                        | Browser-decodable audio, independent playback and mixer volume                                                         |
-| Text and Markdown files            | Readable text assets; editable text, color, background and size                                                        |
-| PPTX                               | Slide text extraction; export a deck to PDF to retain its visual design                                                |
-| Website URLs                       | Isolated mobile browser with scrolling, input and annotations when connected; local tab sharing and optional embedding |
-| Direct media URLs                  | Fetched only when the source allows CORS; stored as local media                                                        |
-| Charts, diagrams, equations        | Import SVG/PNG/PDF, or use text and editable shapes                                                                    |
+| Content                            | Import and presentation                                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| PNG, JPEG, WebP, AVIF, screenshots | Original local pixels, independent fit/fill/zoom/pan                                                |
+| SVG                                | Plain, self-contained SVG; scripts, HTML and external references rejected                           |
+| GIF                                | Decoded animation frames; bounded decoding budget; use video for large animations                   |
+| PDF                                | PDF.js rendering with page navigation; save multiple views of the same document                     |
+| Local video                        | Browser-decodable codecs, playback and audio through the shared mixer                               |
+| Local audio                        | Browser-decodable audio, independent playback and mixer volume                                      |
+| Text and Markdown files            | Readable text assets; editable text, color, background and size                                     |
+| PPTX                               | Slide text extraction; export a deck to PDF to retain its visual design                             |
+| Website URLs                       | Local tab sharing with annotations and supported native scroll control; optional 390 px iframe view |
+| Direct media URLs                  | Fetched only when the source allows CORS; stored as local media                                     |
+| Charts, diagrams, equations        | Import SVG/PNG/PDF, or use text and editable shapes                                                 |
 
 File picker, drag and drop, clipboard image paste, URL import, and in-app text/shape creation are implemented. Add further file types through `ImportAdapter` in `src/lib/importers.ts`.
 
 Website addresses accept pasted domains without `https://`. The studio starts in a light theme with a clear website connection screen, rather than loading an iframe that may refuse to connect.
 
-When the browser service is connected, **Open live browser** opens a real isolated Chromium session with a 390 × 693 mobile viewport and mobile user agent. Scroll, click, type or paste in **Interact** mode, and switch to **Annotate** for marks and presenter positioning. The page streams directly into the recording canvas, so this path does not require tab-sharing permission. **More options → Readable article view** removes page furniture from articles in that temporary browser; reload restores the original site. Marks stay fixed to the frame while the page scrolls.
+1. Choose **Open website window** to open the actual website in a narrow, separate local window. The browser may adjust the requested size; resize it to trigger the site's responsive layout. This does not spoof a mobile user agent.
+2. Return to Frameflow and choose **Share website tab**. Select that website's tab in the browser's standard sharing picker, not the Frameflow tab or desktop. The live pixels are composited locally with your presenter and annotations.
+3. Where supported, choose **Scroll here**, allow the browser's scroll-control prompt, and scroll over the frame. **Annotate** or any drawing tool stops scroll forwarding so you can draw and move the presenter. Links, forms, typing and embedded media controls work in the actual source window. If scroll control is unavailable or denied, scroll in that source window; tab capture still works.
 
-The service receives the website URL and your browser interactions. Camera, microphone, imported files, and recordings remain on your device. Sessions have fresh browser storage and close on disconnect or after 4½ minutes. Website pixels update at roughly 5–8 fps depending on the page and network; the presenter and recording compositor still request 30 fps. Website audio, file uploads and downloads are not included. Website sign-in, verification challenges and access restrictions still apply.
+Native in-preview scrolling uses [Captured Surface Control](https://developer.chrome.com/docs/web-platform/captured-surface-control), available in supported desktop Chromium browsers (Chrome 136+). It is feature-detected. Screen sharing is browser-dependent and is not available on every mobile browser. There is no website proxy, cloud browser, session timer or upload of captured pixels. The website itself makes its normal network requests, with its existing cookies, sign-in and verification requirements.
 
-Without a configured service, **Open website** and **Share website tab** provide the existing local screen-sharing path. **More options → Try embedded view** remains an explicit alternative for sites allowing iframes; embedded capture needs desktop Chromium Region Capture. The app never silently substitutes an iframe for the live browser. Opening studio dialogs pauses an embedded screen capture; backgrounding pauses all takes.
+**More options → Try embedded view** is an explicit alternative for sites allowing iframes. It uses a 390 CSS-pixel viewport with direct interaction. Websites such as ScienceAlert can refuse embedding via `X-Frame-Options` or CSP; an ordinary web app cannot override those headers. Use tab sharing in that case. Embedded recording needs desktop Chromium Region Capture, with the Frameflow tab selected. Opening studio dialogs pauses an embedded screen capture; backgrounding pauses all takes. Marks stay fixed to the frame while the website scrolls. Website audio is not captured.
 
-See [browser-service/README.md](browser-service/README.md) for local testing, isolated network egress, and deployment configuration. `public/browser-config.json` deliberately defaults to an empty endpoint; enabling a cloud service is an explicit deployment choice.
+To verify the real native workflow in a visible desktop Chromium browser (separate from deterministic CI tests):
+
+```bash
+npx playwright install chromium
+npm run test:native-web
+```
+
+Set `FRAMEFLOW_BROWSER_EXECUTABLE` if using an installed Chromium-family browser. This test opens a narrow local website that denies iframe embedding, shares it with native browser capture, forwards real wheel gestures, exercises source-window forms, annotates, and exports a playable vertical take. It uses no physical camera or microphone and needs a desktop display.
 
 ## Recording behavior
 
@@ -91,7 +100,7 @@ See [browser-service/README.md](browser-service/README.md) for local testing, is
 
 ## Deploy
 
-The recording studio is a static client-side app. The optional website browser is a separate Node.js service. Publish the contents of `dist/` on any HTTPS static host. No secrets or backend environment variables are needed. `base: './'` supports deployment beneath a repository path, including GitHub Pages.
+The complete app is a static client-side build. Publish the contents of `dist/` on any HTTPS static host. No secrets or backend environment variables are needed. `base: './'` supports deployment beneath a repository path, including GitHub Pages.
 
 The included GitHub Actions workflow audits dependencies, checks types, runs unit tests, and verifies the production build in the browser on pull requests and pushes to `main`. Action dependencies are pinned to verified commit SHAs. After enabling **Settings → Pages → Source: GitHub Actions**, successful pushes to `main` publish the exact tested build. Pull requests run the checks without deploying. A manual run is also available from Actions. See [deployment instructions](docs/DEPLOYMENT.md).
 

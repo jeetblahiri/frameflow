@@ -23,9 +23,6 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm ci --prefix browser-service
-      - run: npm audit --prefix browser-service --audit-level=moderate
-      - run: npm test --prefix browser-service
       - run: npm audit --audit-level=moderate
       - run: npm run check
       - run: npm test
