@@ -1093,3 +1093,111 @@ body {
   font-size: 11px;
   line-height: 1.5;
 }
+
+.script-bar {
+  --prompter-row-height: 52px;
+  height: var(--prompter-row-height);
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 620px) minmax(120px, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.script-bar-label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  color: #657085;
+  font-size: 12px;
+}
+.script-bar-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8a92a0;
+}
+.script-bar-reader {
+  height: calc(var(--prompter-row-height) - 4px);
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  line-height: calc((var(--prompter-row-height) - 4px) / 2);
+  text-align: center;
+  color: #303b51;
+  scroll-behavior: auto;
+}
+.script-bar-reader::-webkit-scrollbar {
+  display: none;
+}
+.script-bar-reader p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+.script-bar-reader .empty-script {
+  color: #8891a0;
+}
+.script-bar-reader:focus-visible {
+  outline: 2px solid #a698dc;
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+.script-bar-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+.studio-v4 .script-bar-actions .icon-button {
+  width: 28px;
+  height: 30px;
+}
+.script-modal-editor {
+  width: 100%;
+  min-height: min(42vh, 320px);
+  padding: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+}
+.studio-v4.distraction-free.script-open {
+  grid-template-rows: 52px minmax(0, 1fr) 76px;
+}
+@media (max-width: 900px) {
+  .script-bar {
+    grid-template-columns: minmax(90px, 1fr) minmax(0, 620px) minmax(90px, 1fr);
+    gap: 4px;
+    padding: 0 8px;
+  }
+  .script-bar-label small {
+    display: none;
+  }
+  .script-bar-actions .script-restart {
+    display: none;
+  }
+  .studio-v4 .script-bar-actions .icon-button {
+    width: 26px;
+    height: 28px;
+  }
+  .script-bar-actions {
+    gap: 2px;
+  }
+}
+@media (max-width: 700px) {
+  .script-bar {
+    --prompter-row-height: 48px;
+  }
+  .script-bar-label {
+    font-size: 10px;
+    gap: 5px;
+  }
+  .studio-v4.distraction-free.script-open {
+    grid-template-rows: 48px minmax(0, 1fr) 76px;
+  }
+}

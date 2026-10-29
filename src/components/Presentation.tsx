@@ -26,6 +26,7 @@ interface Props {
   state: RecordingState;
   onExpand: () => void;
   expanded: boolean;
+  scriptVisible: boolean;
 }
 export function Presentation({
   web,
@@ -45,6 +46,7 @@ export function Presentation({
   state,
   onExpand,
   expanded,
+  scriptVisible,
 }: Props) {
   const preview = useRef<HTMLCanvasElement>(null);
   const border = useRef<HTMLDivElement>(null);
@@ -98,7 +100,7 @@ export function Presentation({
       observer.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [expanded]);
+  }, [expanded, scriptVisible]);
   useEffect(() => {
     if (composition.camera.background === 'remove' && camera) presenter.enable();
     else presenter.dispose();

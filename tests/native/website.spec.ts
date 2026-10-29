@@ -32,6 +32,13 @@ test('scrolls and records a real local website tab that denies iframe embedding'
   await page.getByRole('button', { name: 'From a link' }).click();
   await page.getByLabel('Content URL').fill('http://127.0.0.1:4321');
   await page.getByRole('button', { name: 'Add to library' }).click();
+  await page.getByRole('button', { name: 'Script', exact: true }).click();
+  const reader = (await page
+    .getByRole('region', { name: 'Script reading area', exact: true })
+    .boundingBox())!;
+  expect(reader.y + reader.height).toBeLessThan(
+    (await page.getByTestId('composition').boundingBox())!.y,
+  );
   await expect(page.locator('iframe.mobile-webpage')).toHaveCount(0);
   const popup = context.waitForEvent('page');
   await page.getByRole('button', { name: 'Open website window', exact: true }).click();

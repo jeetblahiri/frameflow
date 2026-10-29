@@ -661,6 +661,11 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
   await page.mouse.up();
   await expect(page.getByRole('button', { name: 'Undo last annotation' })).toBeEnabled();
   await start(page);
+  await page.getByRole('button', { name: 'Script', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit script', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume recording', exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Resume recording', exact: true }).click();
   await page.waitForTimeout(1200);
   await page.evaluate(() =>
     (window as Window & { testWebStream?: MediaStream }).testWebStream
@@ -1013,4 +1018,120 @@ test('retains a shared website across local scenes and releases it when its fina
   await expect(
     page.getByRole('button', { name: 'Scene 1: A new perspective', exact: true }),
   ).toHaveAttribute('aria-current', 'true');
+});
+
+test('centres the script above the recording frame without a sidebar or preview shrink', async ({
+  page,
+}, info) => {
+  for (const viewport of [
+    { width: 1440, height: 960 },
+    { width: 1024, height: 768 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+        ),
+    );
+    const before = (await page.getByTestId('composition').boundingBox())!;
+    await page.getByRole('button', { name: 'Script', exact: true }).click();
+    const reader = page.getByRole('region', { name: 'Script reading area', exact: true });
+    await expect(reader).toBeVisible();
+    const script = (await reader.boundingBox())!;
+    const frame = (await page.getByTestId('composition').boundingBox())!;
+    expect(script.y + script.height).toBeLessThan(frame.y);
+    expect(Math.abs(script.x + script.width / 2 - frame.x - frame.width / 2)).toBeLessThan(1);
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(Math.abs(frame[key] - before[key])).toBeLessThan(1);
+    await expect(page.locator('.controls-panel')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    if (viewport.width === 1440 || viewport.width === 390)
+      await page.screenshot({ path: info.outputPath(`top-script-${viewport.width}.png`) });
+    await page.getByRole('button', { name: 'Close script', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Script', exact: true })).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Teleprompter', exact: true })).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: 'Script', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle distraction-free view' }).click();
+  await expect(page.getByRole('region', { name: 'Teleprompter', exact: true })).toBeVisible();
+  const withScript = (await page.getByTestId('composition').boundingBox())!;
+  const reader = (await page
+    .getByRole('region', { name: 'Script reading area', exact: true })
+    .boundingBox())!;
+  expect(reader.y + reader.height).toBeLessThan(withScript.y);
+  await page.getByRole('button', { name: 'Close script', exact: true }).click();
+  expect((await page.getByTestId('composition').boundingBox())!.height).toBeGreaterThan(
+    withScript.height,
+  );
+  await expect(page.getByRole('button', { name: 'Start recording', exact: true })).toBeVisible();
+});
+
+test('edits and scrolls the top script, follows scenes, and keeps its words out of a recorded take', async ({
+  page,
+}) => {
+  await installSharedWebsite(page);
+  await addWebsite(page);
+  await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Script', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit script', exact: true }).click();
+  const text =
+    'PRIVATE SCRIPT — only for the presenter.\n\n' +
+    Array.from(
+      { length: 16 },
+      (_, i) =>
+        `Paragraph ${i + 1}. This is a deliberately long reading script to check scrolling beside the camera sightline.`,
+    ).join('\n\n');
+  await page.getByRole('textbox', { name: 'Scene script', exact: true }).fill(text);
+  await page.getByRole('slider', { name: 'Script text size', exact: true }).press('ArrowRight');
+  await page.getByLabel('Teleprompter speed', { exact: true }).selectOption('14');
+  await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
+  const reader = page.getByRole('region', { name: 'Script reading area', exact: true });
+  await expect(reader).toContainText('PRIVATE SCRIPT');
+  expect(await reader.evaluate((el) => getComputedStyle(el).fontSize)).toBe('19px');
+  await page.getByRole('button', { name: 'Auto-scroll', exact: true }).click();
+  await expect.poll(() => reader.evaluate((el) => el.scrollTop)).toBeGreaterThan(1);
+  await page.getByRole('button', { name: 'Pause scrolling', exact: true }).click();
+  const position = await reader.evaluate((el) => el.scrollTop);
+  await page.waitForTimeout(250);
+  expect(await reader.evaluate((el) => el.scrollTop)).toBeCloseTo(position, 0);
+  await expect.poll(async () => (await project(page))?.scenes[0].script).toBe(text);
+  await page.getByRole('button', { name: 'Next scene', exact: true }).click();
+  await expect(reader).toContainText('Imagine looking down at Earth');
+  expect(await reader.evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(page.getByRole('button', { name: 'Auto-scroll', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Previous scene', exact: true }).click();
+  await expect(reader).toContainText('PRIVATE SCRIPT');
+  await page.getByRole('button', { name: 'Auto-scroll', exact: true }).click();
+  await start(page);
+  await page.waitForTimeout(1300);
+  await page.getByRole('button', { name: 'Finish recording', exact: true }).click();
+  const video = page.getByLabel('Recording preview');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(1080);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoHeight)).toBe(1920);
+  await video.evaluate(async (v: HTMLVideoElement) => {
+    v.muted = true;
+    await v.play();
+  });
+  const delta = await video.evaluate((v: HTMLVideoElement) => {
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(v, 0, 0);
+    return [0.15, 0.5, 0.85].reduce(
+      (sum, y) =>
+        sum +
+        [...ctx.getImageData(540, Math.round(y * 1920), 1, 1).data]
+          .slice(0, 3)
+          .reduce((n, value, i) => n + Math.abs(value - [68, 187, 136][i]), 0),
+      0,
+    );
+  });
+  expect(delta).toBeLessThan(30);
 });

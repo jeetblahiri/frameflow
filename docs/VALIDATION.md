@@ -1,13 +1,13 @@
 # Validation and release boundaries
 
-Validated on 29 October 2026. This release is prepared for static HTTPS deployment. Physical iPad certification remains pending.
+Validated on 30 October 2026. This release is prepared for static HTTPS deployment. Physical iPad certification remains pending.
 
 ## Automated checks
 
 - Strict TypeScript compilation: pass.
 - Production static build: pass. The app and bundled assets also load beneath a `/frameflow/` repository subpath.
 - Twenty-nine frontend unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
-- Twenty production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
+- Twenty-two production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
 - Desktop visual inspection at 1440 × 960: pass; screenshot in `docs/studio.png`.
 - Viewport checks at 1024 × 768, 768 × 1024, and 390 × 844: output remains 9:16, no horizontal document overflow, annotation controls work. These use a desktop engine and pointer input, not Safari or Apple Pencil.
 
@@ -16,6 +16,7 @@ The newest local Chrome 156 / Playwright browser had a native rendering stall ev
 ## Live website and presenter checks
 
 - The studio defaults to a light color scheme with a white header, readable controls, and a clear preview. The content library, canvas board and inspector start closed. Each is reachable from the navigation bar.
+- The script reader is centered above the recording frame at desktop, tablet and phone widths. Opening/closing it keeps frame bounds unchanged; it stays visible in distraction-free mode. Editor settings, auto-scroll/pause, scene reset and persistence are checked. A decoded shared-website take remains free of script text, and editing pauses embedded capture before the editor appears.
 - Deletion regressions cover shared-source scenes, overlays, deliberately empty views, nearest-scene selection, contiguous numbering, direct scene deletion, clearing the last view, presenter retention and persistence after reload.
 - Website toolbar bounds remain fixed in both disconnected and shared states at 1440 × 960, 1024 × 768, 768 × 1024 and 390 × 844. The visible frame keeps its position and size through scroll/annotation switches and disconnect. The native sharing test also compares actual frame width and height before and after capture starts, including the browser’s sharing-related viewport reduction; the preview can recenter when available height changes.
 - Removing a captured asset stops its track and pauses a take, then permits resume on a surviving local scene and a playable vertical export. Sharing is retained across saved local views and released when its final website view is removed.

@@ -15,6 +15,8 @@ Four coordinate spaces have separate ownership:
 
 `project-updates` applies asset and scene deletion as one project transformation. It removes source references everywhere, prunes only views emptied by that asset deletion, keeps surviving overlays and intentional blank views, and selects a neighbouring active scene. Removing the final view resets it to an empty working scene while retaining the shared presenter. The scene strip derives numbering and selection from this same project state. Source membership changes also pause inactive video elements without replacing the microphone or recorder.
 
+The teleprompter replaces the normal navigation row with a fixed-height reader centered on the preview. It is a sibling of the workspace and sits outside the Region Capture rectangle. Its edit dialog uses the same overlay lifecycle as the studio dialogs; active embedded capture pauses before editing. Reading settings stay separate from scene script data, while scene changes reset the reading position before paint. Reading also pauses while studio dialogs are open.
+
 ## Live websites and presenter processing
 
 The preview measures its available workspace, preserves the 9:16 border and keeps labels/footer in separate grid rows. Website controls share the ordinary fixed-height toolbar. A viewport-height loss during the native capture permission transaction is reclaimed from preview margins, bounded by actual available space. A later window resize restores ordinary responsive fitting. None of this changes the recording canvas dimensions or composition coordinates.

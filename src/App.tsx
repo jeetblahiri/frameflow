@@ -83,14 +83,17 @@ const DRAW_TOOLS = [
   { id: 'laser', label: 'Laser pointer', icon: Scan },
   { id: 'eraser', label: 'Eraser', icon: Eraser },
 ] as const;
-type Dialog = 'import' | 'record' | 'takes' | 'help' | 'new' | 'scene' | null;
+type Dialog = 'import' | 'record' | 'takes' | 'help' | 'new' | 'scene' | 'script' | null;
 export default function App() {
   const [project, setProject] = useState<Project | null>(null),
     [saved, setSaved] = useState<'saving' | 'saved' | 'error'>('saved');
   const [selected, setSelected] = useState<string | null>('cover'),
     [leftOpen, setLeftOpen] = useState(false),
     [rightOpen, setRightOpen] = useState(false),
-    [rightTab, setRightTab] = useState('script'),
+    [rightTab, setRightTab] = useState('focus'),
+    [scriptOpen, setScriptOpen] = useState(false),
+    [scriptFont, setScriptFont] = useState(18),
+    [scriptSpeed, setScriptSpeed] = useState(8),
     [dialog, setDialog] = useState<Dialog>(null),
     [editingAsset, setEditingAsset] = useState<Asset | null>(null),
     [isNewAsset, setIsNewAsset] = useState(false),
@@ -112,6 +115,7 @@ export default function App() {
     [sceneName, setSceneName] = useState(''),
     [newScene, setNewScene] = useState(false),
     [sceneTransition, setSceneTransition] = useState<'cut' | 'fade'>('cut');
+  const scriptButton = useRef<HTMLButtonElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null),
     projectInput = useRef<HTMLInputElement>(null),
     toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -555,7 +559,7 @@ export default function App() {
   const locked = engine.state !== 'idle';
   return (
     <div
-      className={`app-shell studio-v3 studio-v4 ${!leftOpen || focusMode ? 'left-collapsed' : ''} ${!rightOpen || focusMode ? 'right-collapsed' : ''} ${focusMode ? 'distraction-free' : ''}`}
+      className={`app-shell studio-v3 studio-v4 ${!leftOpen || focusMode || scriptOpen ? 'left-collapsed' : ''} ${!rightOpen || focusMode || scriptOpen ? 'right-collapsed' : ''} ${scriptOpen ? 'script-open' : ''} ${focusMode ? 'distraction-free' : ''}`}
       onDragEnter={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -688,60 +692,85 @@ export default function App() {
           </button>
         </div>
       </header>
-      <nav className="studio-nav" aria-label="Studio tools">
-        <h1 className="sr-only">Your ideas, in frame</h1>
-        <button
-          className={leftOpen ? 'active' : ''}
-          aria-label="Toggle content library"
-          aria-expanded={leftOpen}
-          onClick={() => {
-            setLeftOpen(!leftOpen);
-            setRightOpen(false);
-            setFocusMode(false);
+      {scriptOpen ? (
+        <Teleprompter
+          script={active.script}
+          sceneName={active.name}
+          sceneId={active.id}
+          fontSize={scriptFont}
+          speed={scriptSpeed}
+          blocked={dialog !== null}
+          onEdit={() => {
+            if (web.mode === 'embedded' && engine.recorder.state === 'recording')
+              engine.recorder.pause();
+            setDialog('script');
           }}
-        >
-          <LayoutPanelLeft size={16} />
-          Content
-        </button>
-        <button
-          className={rightOpen && rightTab === 'script' ? 'active' : ''}
-          onClick={() => {
-            setRightTab('script');
-            setRightOpen(!(rightOpen && rightTab === 'script'));
-            setLeftOpen(false);
-            setFocusMode(false);
+          onClose={() => {
+            setScriptOpen(false);
+            requestAnimationFrame(() => scriptButton.current?.focus());
           }}
-        >
-          <PenLine size={16} />
-          Script
-        </button>
-        <button
-          className={rightOpen && rightTab === 'settings' ? 'active' : ''}
-          onClick={() => {
-            setRightTab('settings');
-            setRightOpen(!(rightOpen && rightTab === 'settings'));
-            setLeftOpen(false);
-            setFocusMode(false);
-          }}
-        >
-          <Camera size={16} />
-          Presenter
-        </button>
-        <button
-          className={showCanvas ? 'active' : ''}
-          aria-pressed={showCanvas}
-          onClick={() => setShowCanvas(!showCanvas)}
-        >
-          <Layers2 size={16} />
-          Canvas
-        </button>
-        <button className="primary" aria-label="Import content" onClick={() => setDialog('import')}>
-          <Plus size={16} />
-          Add content
-        </button>
-      </nav>
+        />
+      ) : (
+        <nav className="studio-nav" aria-label="Studio tools">
+          <h1 className="sr-only">Your ideas, in frame</h1>
+          <button
+            className={leftOpen ? 'active' : ''}
+            aria-label="Toggle content library"
+            aria-expanded={leftOpen}
+            onClick={() => {
+              setLeftOpen(!leftOpen);
+              setRightOpen(false);
+              setFocusMode(false);
+            }}
+          >
+            <LayoutPanelLeft size={16} />
+            Content
+          </button>
+          <button
+            ref={scriptButton}
+            aria-expanded={false}
+            onClick={() => {
+              setScriptOpen(true);
+              setRightOpen(false);
+              setLeftOpen(false);
+              setShowCanvas(false);
+            }}
+          >
+            <PenLine size={16} />
+            Script
+          </button>
+          <button
+            className={rightOpen && rightTab === 'settings' ? 'active' : ''}
+            onClick={() => {
+              setRightTab('settings');
+              setRightOpen(!(rightOpen && rightTab === 'settings'));
+              setLeftOpen(false);
+              setFocusMode(false);
+            }}
+          >
+            <Camera size={16} />
+            Presenter
+          </button>
+          <button
+            className={showCanvas ? 'active' : ''}
+            aria-pressed={showCanvas}
+            onClick={() => setShowCanvas(!showCanvas)}
+          >
+            <Layers2 size={16} />
+            Canvas
+          </button>
+          <button
+            className="primary"
+            aria-label="Import content"
+            onClick={() => setDialog('import')}
+          >
+            <Plus size={16} />
+            Add content
+          </button>
+        </nav>
+      )}
       <main className="studio-layout">
-        {leftOpen && !focusMode && (
+        {leftOpen && !focusMode && !scriptOpen && (
           <Library
             assets={project.assets}
             selected={selected}
@@ -802,6 +831,7 @@ export default function App() {
           >
             <Presentation
               expanded={focusMode}
+              scriptVisible={scriptOpen}
               canvasRef={canvasRef}
               web={web}
               presenter={engine.presenter}
@@ -894,7 +924,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        {rightOpen && !focusMode && (
+        {rightOpen && !focusMode && !scriptOpen && (
           <aside className="controls-panel panel">
             <div className="panel-title">
               <span>
@@ -905,31 +935,19 @@ export default function App() {
               </IconButton>
             </div>
             <div className="panel-tabs" role="tablist" aria-label="Studio controls">
-              {['script', 'focus', 'settings'].map((t) => (
+              {['focus', 'settings'].map((t) => (
                 <button
                   key={t}
                   role="tab"
                   aria-selected={rightTab === t}
                   onClick={() => setRightTab(t)}
                 >
-                  {t === 'script' ? 'Script' : t === 'focus' ? 'Focus Lens' : 'Settings'}
+                  {t === 'focus' ? 'Focus Lens' : 'Settings'}
                 </button>
               ))}
             </div>
             <div className="right-content">
-              {rightTab === 'script' ? (
-                <Teleprompter
-                  sceneId={active.id}
-                  sceneName={active.name}
-                  script={active.script}
-                  onChange={(script) =>
-                    update((p) => ({
-                      ...p,
-                      scenes: p.scenes.map((s) => (s.id === active.id ? { ...s, script } : s)),
-                    }))
-                  }
-                />
-              ) : rightTab === 'settings' ? (
+              {rightTab === 'settings' ? (
                 <DeviceSettings
                   engine={engine}
                   composition={composition}
@@ -1255,6 +1273,62 @@ export default function App() {
         />
       )}
       {dialog === 'help' && <HelpDialog onClose={() => setDialog(null)} />}
+      {dialog === 'script' && (
+        <Modal title="Scene script" subtitle={active.name} onClose={() => setDialog(null)}>
+          <label className="field-label">
+            Your script
+            <textarea
+              className="script-modal-editor"
+              aria-label="Scene script"
+              maxLength={100000}
+              value={active.script}
+              onChange={(event) => {
+                const script = event.target.value;
+                update((p) => ({
+                  ...p,
+                  scenes: p.scenes.map((scene) =>
+                    scene.id === active.id ? { ...scene, script } : scene,
+                  ),
+                }));
+              }}
+              placeholder="Write what you want to say…"
+            />
+          </label>
+          <div className="two-fields">
+            <label className="field-label">
+              Text size · {scriptFont}px
+              <input
+                aria-label="Script text size"
+                type="range"
+                min={14}
+                max={22}
+                value={scriptFont}
+                onChange={(event) => setScriptFont(Number(event.target.value))}
+              />
+            </label>
+            <label className="field-label">
+              Scroll speed
+              <select
+                aria-label="Teleprompter speed"
+                value={scriptSpeed}
+                onChange={(event) => setScriptSpeed(Number(event.target.value))}
+              >
+                <option value={4}>Slow</option>
+                <option value={8}>Normal</option>
+                <option value={14}>Fast</option>
+              </select>
+            </label>
+          </div>
+          <p className="help-text">
+            Your script stays outside the recording. Changes save with this scene.
+          </p>
+          <button className="primary full" onClick={() => setDialog(null)}>
+            <Check size={15} />
+            Done
+          </button>
+        </Modal>
+      )}
+
       {dialog === 'scene' && (
         <Modal
           title={newScene ? 'A moment worth saving.' : 'Set the scene.'}
