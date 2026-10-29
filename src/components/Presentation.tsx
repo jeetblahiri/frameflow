@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { LockKeyhole, Maximize, MousePointer2, Globe2, MonitorUp } from 'lucide-react';
 import type { Annotation, Asset, Composition, Point, RecordingState, Tool } from '../model';
@@ -47,6 +47,18 @@ export function Presentation({
   const preview = useRef<HTMLCanvasElement>(null);
   const border = useRef<HTMLDivElement>(null);
   const [displayWidth, setDisplayWidth] = useState(300);
+  const [space, setSpace] = useState<{ width: number; height: number }>();
+  const frameHeight = space
+    ? Math.max(
+        40,
+        Math.min(
+          718,
+          space.height - 44,
+          ((space.width - 50) * 16) / 9,
+          space.height - 100 + web.viewportInset,
+        ),
+      )
+    : undefined;
   const { interact, setInteract } = web;
   useEffect(() => {
     if (tool !== 'select') setInteract(false);
@@ -62,11 +74,28 @@ export function Presentation({
   }, [webAsset?.id, web.assetId, web.stop, web.setInteract]);
   const latest = useRef({ composition, assets, camera, web, embedded, webAssetId: webAsset?.id });
   latest.current = { composition, assets, camera, web, embedded, webAssetId: webAsset?.id };
-  useEffect(() => {
-    if (!border.current) return;
-    const observer = new ResizeObserver((entries) => setDisplayWidth(entries[0].contentRect.width));
-    observer.observe(border.current);
-    return () => observer.disconnect();
+  useLayoutEffect(() => {
+    const frame = border.current;
+    const container = frame?.parentElement?.parentElement;
+    if (!frame || !container) return;
+    const measure = () => {
+      const rect = container.getBoundingClientRect();
+      setSpace({ width: rect.width, height: rect.height });
+    };
+    measure();
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === frame) setDisplayWidth(entry.contentRect.width);
+        else measure();
+      }
+    });
+    observer.observe(frame);
+    observer.observe(container);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, []);
   useEffect(() => {
     if (composition.camera.background === 'remove' && camera) presenter.enable();
@@ -154,7 +183,10 @@ export function Presentation({
   const erase = (p: Point) =>
     update((c) => ({ ...c, annotations: c.annotations.filter((a) => !hitsAnnotation(a, p)) }));
   return (
-    <div className={`output-wrapper ${state === 'recording' ? 'is-recording' : ''}`}>
+    <div
+      className={`output-wrapper ${state === 'recording' ? 'is-recording' : ''}`}
+      style={frameHeight ? { height: frameHeight + 42, width: (frameHeight * 9) / 16 } : undefined}
+    >
       <div className="output-label">
         <span>
           <i />

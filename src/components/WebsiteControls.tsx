@@ -41,18 +41,24 @@ export function WebsiteControls({ asset, web }: { asset: Asset; web: WebCapture 
           </div>
         )}
         {web.mode !== 'off' && (
-          <button className="secondary" onClick={web.stop}>
+          <button
+            className="secondary website-disconnect"
+            aria-label="Disconnect"
+            onClick={web.stop}
+          >
             <X size={14} />
-            Disconnect
+            <span>Disconnect</span>
           </button>
         )}
         {web.view === 'embed' && web.mode === 'off' && (
           <button
-            className="secondary"
+            className="secondary website-connect"
+            aria-label="Connect embedded capture"
             disabled={web.busy}
             onClick={() => void web.connect('embedded', asset.id)}
           >
-            {web.busy ? 'Connecting…' : 'Connect embedded capture'}
+            <MonitorUp size={14} />
+            <span>{web.busy ? 'Connecting…' : 'Connect embedded capture'}</span>
           </button>
         )}
         <details className="website-options">
@@ -82,7 +88,7 @@ export function WebsiteControls({ asset, web }: { asset: Asset; web: WebCapture 
         </details>
       </div>
       {sharing && (
-        <p className="website-hint">
+        <p className="website-hint sr-only" aria-live="polite">
           {web.scrollBusy
             ? 'Allow scroll control in the browser prompt to scroll over the frame.'
             : web.scrolling
@@ -94,7 +100,7 @@ export function WebsiteControls({ asset, web }: { asset: Asset; web: WebCapture 
         </p>
       )}
       {web.view === 'embed' && (
-        <p className="website-hint">
+        <p className="website-hint sr-only" aria-live="polite">
           If the page refuses to connect, use More options → Use tab sharing. Websites control
           whether they allow embedding.
         </p>

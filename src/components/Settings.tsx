@@ -410,9 +410,9 @@ export function FocusSettings({
             </div>
             {asset.kind === 'webpage' ? (
               <p className="help-text">
-                Live mobile page · 390 px viewport. Use Interact above the frame to scroll or use
-                forms. Switch to Annotate / move to draw. Connect capture before recording. Marks
-                stay at their frame positions as the page scrolls.
+                Share the website tab, then use Scroll here where supported. Links and forms use the
+                source window. Choose Annotate to draw or move the presenter. Marks stay at their
+                frame positions while the page scrolls.
               </p>
             ) : (
               <>

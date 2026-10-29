@@ -803,3 +803,214 @@ test('preserves local tab sharing when captured surface control is unavailable',
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Your website, in frame.' })).toBeVisible();
 });
+
+async function installSharedWebsite(page: Page) {
+  await page.evaluate(() => {
+    const forwarded: (string | null)[] = [];
+    Object.defineProperty(window, 'CaptureController', {
+      configurable: true,
+      value: class {
+        setFocusBehavior() {}
+        async forwardWheel(element: HTMLElement | null) {
+          forwarded.push(element?.dataset.testid || null);
+        }
+      },
+    });
+    Object.defineProperty(window, 'CropTarget', {
+      configurable: true,
+      value: { fromElement: async () => ({}) },
+    });
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 430;
+      canvas.height = 765;
+      const ctx = canvas.getContext('2d')!;
+      const timer = setInterval(() => {
+        ctx.fillStyle = '#44bb88';
+        ctx.fillRect(0, 0, 430, 765);
+      }, 33);
+      const stream = canvas.captureStream(30);
+      const track = stream.getVideoTracks()[0] as MediaStreamTrack & {
+        cropTo: () => Promise<void>;
+      };
+      track.getSettings = () => ({ displaySurface: 'browser' });
+      track.cropTo = async () => {};
+      track.addEventListener('ended', () => clearInterval(timer));
+      Object.assign(window, { sharedWebsiteTest: { stream, forwarded } });
+      return stream;
+    };
+  });
+}
+
+async function addWebsite(page: Page, url = 'https://example.com') {
+  await page.getByRole('button', { name: 'Import content', exact: true }).click();
+  await page.getByRole('button', { name: 'From a link' }).click();
+  await page.getByLabel('Content URL').fill(url);
+  await page.getByRole('button', { name: 'Add to library' }).click();
+}
+
+test('synchronises deleted assets, scene cards, numbering, selection and reload', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Enable camera', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disable camera', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Toggle content library' }).click();
+  await page.getByRole('button', { name: 'Delete selected asset' }).click();
+  await expect(page.locator('.scene-card')).toHaveCount(3);
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: A new perspective', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+  expect(await page.locator('.scene-thumb > span').allTextContents()).toEqual(['01', '02', '03']);
+  await page.getByRole('button', { name: 'Select Our little blue planet', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete selected asset' }).click();
+  await expect(page.locator('.scene-card')).toHaveCount(2);
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: The bigger picture', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+  await page.getByRole('button', { name: 'Delete scene Take a step back', exact: true }).click();
+  await expect(page.locator('.scene-card')).toHaveCount(1);
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: The bigger picture', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+  await page.getByRole('button', { name: 'Delete scene The bigger picture', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: Empty scene', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+  await expect.poll(async () => (await project(page))?.scenes[0]?.name).toBe('Empty scene');
+  const saved = await project(page);
+  expect(saved.assets).toHaveLength(3);
+  expect(saved.scenes[0].composition.layers).toEqual([]);
+  expect(saved.scenes[0].composition.camera.enabled).toBe(true);
+  expect(saved.scenes[0].composition.camera).toEqual(saved.presenter);
+  await page.reload();
+  await expect(page.locator('.scene-card')).toHaveCount(1);
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: Empty scene', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+  const restored = await project(page);
+  expect(restored.assets.some((asset) => asset.id === 'cover' || asset.id === 'earth')).toBe(false);
+  expect(restored.scenes[0].composition.layers).toEqual([]);
+});
+
+test('keeps the recording frame stationary and full size across website sharing states and viewports', async ({
+  page,
+}, info) => {
+  await installSharedWebsite(page);
+  const frame = page.getByTestId('composition');
+  const baseline = (await frame.boundingBox())!;
+  await addWebsite(page);
+  const idle = (await frame.boundingBox())!;
+  expect(Math.abs(idle.height - baseline.height)).toBeLessThan(1);
+  expect(Math.abs(idle.y - baseline.y)).toBeLessThan(1);
+  for (const size of [
+    { width: 1440, height: 960 },
+    { width: 1024, height: 768 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(size);
+    // Let the browser deliver ResizeObserver and paint the intentional window resize first.
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+        ),
+    );
+    const before = (await frame.boundingBox())!;
+    await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+    const connected = (await frame.boundingBox())!;
+    if (size.width === 1440 || size.width === 390)
+      await page.screenshot({ path: info.outputPath(`shared-website-${size.width}.png`) });
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(Math.abs(connected[key] - before[key])).toBeLessThan(1);
+    await page.getByRole('button', { name: 'Scroll here', exact: true }).click();
+    await expect(page.locator('.website-hint')).toContainText('Scroll over the frame');
+    await page.getByRole('button', { name: 'Annotate', exact: true }).click();
+    expect(Math.abs((await frame.boundingBox())!.height - before.height)).toBeLessThan(1);
+    const toolbar = page.getByRole('region', { name: 'Website controls' });
+    const bounds = (await toolbar.boundingBox())!;
+    expect(bounds.height).toBeLessThanOrEqual(42);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+    expect(Math.abs((await frame.boundingBox())!.height - before.height)).toBeLessThan(1);
+    await expect(frame).toHaveJSProperty('width', 1080);
+    await expect(frame).toHaveJSProperty('height', 1920);
+  }
+});
+
+test('keeps website sharing across saved views, then stops it and pauses safely when its asset is deleted', async ({
+  page,
+}) => {
+  await installSharedWebsite(page);
+  await addWebsite(page);
+  await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Save view', exact: true }).click();
+  await page.getByLabel('Scene name').fill('Another article view');
+  await page.getByRole('button', { name: 'Save current view', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await start(page);
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: 'Toggle content library', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete selected asset' }).click();
+  await expect(page.getByRole('button', { name: 'Resume recording', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Website controls' })).toHaveCount(0);
+  await expect(page.locator('.scene-card')).toHaveCount(3);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as Window & { sharedWebsiteTest?: { stream: MediaStream } }
+        ).sharedWebsiteTest!.stream.getVideoTracks()[0].readyState,
+    ),
+  ).toBe('ended');
+  await expect
+    .poll(async () => (await project(page)).assets.some((asset) => asset.kind === 'webpage'))
+    .toBe(false);
+  const saved = await project(page);
+  const assetIds = new Set(saved.assets.map((asset) => asset.id));
+  expect(
+    saved.scenes.every((scene) =>
+      scene.composition.layers.every((layer) => assetIds.has(layer.assetId)),
+    ),
+  ).toBe(true);
+  expect(saved.scenes.some((scene) => scene.id === saved.activeSceneId)).toBe(true);
+  await page.getByRole('button', { name: 'Resume recording', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Pause recording', exact: true })).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.getByRole('button', { name: 'Finish recording', exact: true }).click();
+  const video = page.getByLabel('Recording preview');
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoWidth)).toBe(1080);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.videoHeight)).toBe(1920);
+});
+
+test('retains a shared website across local scenes and releases it when its final saved view is removed', async ({
+  page,
+}) => {
+  await installSharedWebsite(page);
+  await addWebsite(page);
+  await page.getByRole('button', { name: 'Share website tab', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Next scene', exact: true }).click();
+  const trackState = () =>
+    page.evaluate(
+      () =>
+        (
+          window as Window & { sharedWebsiteTest?: { stream: MediaStream } }
+        ).sharedWebsiteTest!.stream.getVideoTracks()[0].readyState,
+    );
+  expect(await trackState()).toBe('live');
+  await page.getByRole('button', { name: 'Delete scene The hook', exact: true }).click();
+  await expect.poll(trackState).toBe('ended');
+  await expect(page.locator('.scene-card')).toHaveCount(3);
+  await expect
+    .poll(async () => (await project(page))?.assets.some((asset) => asset.kind === 'webpage'))
+    .toBe(true);
+  await expect(
+    page.getByRole('button', { name: 'Scene 1: A new perspective', exact: true }),
+  ).toHaveAttribute('aria-current', 'true');
+});

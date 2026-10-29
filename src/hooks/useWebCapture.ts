@@ -28,6 +28,7 @@ export function useWebCapture(
   const [scrollBusy, setScrollBusy] = useState(false);
   const [assetId, setAssetId] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [viewportInset, setViewportInset] = useState(0);
   const connecting = useRef(false);
   const scrollRequest = useRef(0);
   const wantsScrolling = useRef(false);
@@ -75,8 +76,13 @@ export function useWebCapture(
   }, [stopScrolling]);
   useEffect(() => {
     alive.current = true;
+    const resize = () => {
+      if (!connecting.current) setViewportInset(0);
+    };
+    window.addEventListener('resize', resize);
     return () => {
       alive.current = false;
+      window.removeEventListener('resize', resize);
       stop();
     };
   }, [stop]);
@@ -93,6 +99,7 @@ export function useWebCapture(
       );
       return;
     }
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
     connecting.current = true;
     setBusy(true);
     const request = ++captureRequest.current;
@@ -166,6 +173,13 @@ export function useWebCapture(
       if (!alive.current || request !== captureRequest.current || track.readyState === 'ended')
         throw new Error('Website sharing ended before it was ready.');
       stop();
+      // Native sharing UI can reduce the page viewport during the permission transaction.
+      // Reclaim preview margins for that loss; a subsequent window resize returns to normal fitting.
+      const heightLoss =
+        viewport.width === window.innerWidth
+          ? Math.max(0, viewport.height - window.innerHeight)
+          : 0;
+      setViewportInset((previous) => previous + heightLoss);
       video.current = player;
       stream.current = next;
       controller.current = nextController;
@@ -237,6 +251,7 @@ export function useWebCapture(
   return {
     target,
     scrollTarget,
+    viewportInset,
     mode,
     source: video.current,
     view,

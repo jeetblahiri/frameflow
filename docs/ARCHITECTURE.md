@@ -13,7 +13,11 @@ Four coordinate spaces have separate ownership:
 
 `imageRect` is the shared fit/crop transform. Focus Lens edits scene layers, never source asset positions. Each scene owns a deep snapshot of its layers, annotations, script, and transition. An optional project-level presenter configuration is shared across scenes and synchronized into scene camera data for backward compatibility. Older projects without that field adopt the active presenter on the first edit or camera activation. A short crossfade blends a snapshot of the previous output over the next scene.
 
+`project-updates` applies asset and scene deletion as one project transformation. It removes source references everywhere, prunes only views emptied by that asset deletion, keeps surviving overlays and intentional blank views, and selects a neighbouring active scene. Removing the final view resets it to an empty working scene while retaining the shared presenter. The scene strip derives numbering and selection from this same project state. Source membership changes also pause inactive video elements without replacing the microphone or recorder.
+
 ## Live websites and presenter processing
+
+The preview measures its available workspace, preserves the 9:16 border and keeps labels/footer in separate grid rows. Website controls share the ordinary fixed-height toolbar. A viewport-height loss during the native capture permission transaction is reclaimed from preview margins, bounded by actual available space. A later window resize restores ordinary responsive fitting. None of this changes the recording canvas dimensions or composition coordinates.
 
 `useWebCapture` owns browser-native sharing, its muted decoding video, and an optional CaptureController. It opens a narrow local website window on an explicit click with noopener/noreferrer, then requests a browser-tab source through getDisplayMedia on a separate click. It does not fetch, proxy or host webpages. Window sizing is a browser hint and does not override the website's user agent.
 

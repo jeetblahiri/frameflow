@@ -41,6 +41,7 @@ import {
 import type { Asset, Composition, Project, Recovery, Take, Tool } from './model';
 import { clone, DEFAULT_CAMERA, formatTime, layerFor, uid } from './model';
 import { createSampleProject } from './lib/sample';
+import { removeProjectAsset, removeProjectScene } from './lib/project-updates';
 import {
   assembleChunks,
   clearRecovery,
@@ -153,6 +154,24 @@ export default function App() {
     : undefined;
   const stateRef = useRef({ project, engine, active, web });
   stateRef.current = { project, engine, active, web };
+  const sourceIds = JSON.stringify(active?.composition.layers.map((layer) => layer.assetId) || []);
+  useEffect(() => {
+    engine.media.pauseVideosExcept(
+      stateRef.current.active?.composition.layers.map((layer) => layer.assetId) || [],
+    );
+  }, [sourceIds, engine.media]);
+  useEffect(() => {
+    // A tab may stay connected across local scenes, but never outlive its source or project.
+    if (
+      web.assetId &&
+      (!project?.assets.some((asset) => asset.id === web.assetId) ||
+        !project.scenes.some((scene) =>
+          scene.composition.layers.some((layer) => layer.assetId === web.assetId),
+        ))
+    )
+      web.stop();
+  }, [project?.id, project?.assets, project?.scenes, web.assetId, web.stop]);
+
   const update = useCallback(
     (fn: (p: Project) => Project) =>
       setProject((p) => (p ? { ...fn(p), updatedAt: Date.now() } : p)),
@@ -415,6 +434,7 @@ export default function App() {
     try {
       const p = await importProject(file);
       await saveProject(p);
+      web.stop();
       engine.media.dispose();
       stateRef.current.project?.assets.forEach((a) => {
         if (a.src?.startsWith('blob:')) URL.revokeObjectURL(a.src);
@@ -523,6 +543,14 @@ export default function App() {
       </div>
     );
   const activeIndex = project.scenes.findIndex((s) => s.id === active.id);
+  const websiteAsset = project.assets.find(
+    (asset) =>
+      asset.id ===
+      [...composition.layers]
+        .reverse()
+        .find((layer) => project.assets.find((a) => a.id === layer.assetId)?.kind === 'webpage')
+        ?.assetId,
+  );
   const recording = engine.state === 'recording' || engine.state === 'paused';
   const locked = engine.state !== 'idle';
   return (
@@ -724,18 +752,9 @@ export default function App() {
             onImport={() => setDialog('import')}
             onCreate={createAsset}
             onDelete={(id) => {
+              if (web.assetId === id) web.stop();
               engine.media.releaseAsset(id);
-              update((p) => ({
-                ...p,
-                assets: p.assets.filter((a) => a.id !== id),
-                scenes: p.scenes.map((s) => ({
-                  ...s,
-                  composition: {
-                    ...s.composition,
-                    layers: s.composition.layers.filter((l) => l.assetId !== id),
-                  },
-                })),
-              }));
+              update((p) => removeProjectAsset(p, id));
               setSelected(null);
             }}
             onEdit={editAsset}
@@ -747,14 +766,15 @@ export default function App() {
           />
         )}
         <section className="center-stage" aria-label="Canvas and recording frame">
-          <div className="stage-top">
-            <div>
+          <div className={`stage-top ${websiteAsset ? 'has-website' : ''}`}>
+            <div className="stage-scene-label">
               <span className="stage-status-dot" />
               {showCanvas ? 'Canvas' : 'Preview'}
               <span className="stage-slash">/</span>
               <strong>{active.name}</strong>
             </div>
-            <div>
+            {websiteAsset && <WebsiteControls asset={websiteAsset} web={web} />}
+            <div className="stage-scene-settings">
               <button
                 onClick={() => {
                   setSceneName(active.name);
@@ -768,21 +788,6 @@ export default function App() {
               </button>
             </div>
           </div>
-          {composition.layers.some(
-            (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
-          ) && (
-            <WebsiteControls
-              asset={project.assets.find(
-                (a) =>
-                  a.id ===
-                  [...composition.layers]
-                    .reverse()
-                    .find((l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage')
-                    ?.assetId,
-              )!}
-              web={web}
-            />
-          )}
           <SpatialCanvas
             project={project}
             update={update}
@@ -959,7 +964,9 @@ export default function App() {
           <Layers2 size={16} />
           <div>
             <strong>Your story</strong>
-            <span>{project.scenes.length} scenes</span>
+            <span>
+              {project.scenes.length} {project.scenes.length === 1 ? 'scene' : 'scenes'}
+            </span>
           </div>
           <button
             className="text-link"
@@ -976,27 +983,36 @@ export default function App() {
         </div>
         <div className="scene-cards">
           {project.scenes.map((scene, i) => (
-            <button
-              key={scene.id}
-              className={`scene-card ${scene.id === active.id ? 'active' : ''}`}
-              aria-label={`Scene ${i + 1}: ${scene.name}`}
-              aria-current={scene.id === active.id ? 'true' : undefined}
-              onClick={() => switchScene(scene.id)}
-            >
-              <div className="scene-thumb">
-                <CompositionThumb
-                  composition={scene.composition}
-                  assets={project.assets}
-                  media={engine.media}
-                />
-                <span>{String(i + 1).padStart(2, '0')}</span>
-              </div>
-              <div>
-                <span>{scene.name}</span>
-                <small>{scene.transition === 'fade' ? 'Crossfade' : 'Instant cut'}</small>
-              </div>
-              {scene.id === active.id && <span className="scene-active-dot" />}
-            </button>
+            <div className="scene-card-wrap" key={scene.id}>
+              <button
+                className={`scene-card ${scene.id === active.id ? 'active' : ''}`}
+                aria-label={`Scene ${i + 1}: ${scene.name}`}
+                aria-current={scene.id === active.id ? 'true' : undefined}
+                onClick={() => switchScene(scene.id)}
+              >
+                <div className="scene-thumb">
+                  <CompositionThumb
+                    composition={scene.composition}
+                    assets={project.assets}
+                    media={engine.media}
+                  />
+                  <span>{String(i + 1).padStart(2, '0')}</span>
+                </div>
+                <div>
+                  <span>{scene.name}</span>
+                  <small>{scene.transition === 'fade' ? 'Crossfade' : 'Instant cut'}</small>
+                </div>
+                {scene.id === active.id && <span className="scene-active-dot" />}
+              </button>
+              <button
+                className="scene-remove"
+                aria-label={`Delete scene ${scene.name}`}
+                title={project.scenes.length === 1 ? 'Clear the last scene' : 'Delete scene'}
+                onClick={() => update((p) => removeProjectScene(p, scene.id))}
+              >
+                <X size={13} />
+              </button>
+            </div>
           ))}
           <button
             className="add-scene"
@@ -1303,17 +1319,12 @@ export default function App() {
               <Check size={15} />
               {newScene ? 'Save current view' : 'Update scene'}
             </button>
-            {!newScene && project.scenes.length > 1 && (
+            {!newScene && (
               <button
                 type="button"
                 className="text-danger full"
                 onClick={() => {
-                  const next = project.scenes.find((s) => s.id !== active.id)!;
-                  update((p) => ({
-                    ...p,
-                    scenes: p.scenes.filter((s) => s.id !== active.id),
-                    activeSceneId: next.id,
-                  }));
+                  update((p) => removeProjectScene(p, active.id));
                   setDialog(null);
                 }}
               >
@@ -1366,6 +1377,7 @@ export default function App() {
                 canvas: { x: 0, y: 0, zoom: 0.72 },
                 updatedAt: Date.now(),
               };
+              web.stop();
               setProject(p);
               setSelected(null);
               setDialog(null);

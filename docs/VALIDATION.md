@@ -6,8 +6,8 @@ Validated on 29 October 2026. This release is prepared for static HTTPS deployme
 
 - Strict TypeScript compilation: pass.
 - Production static build: pass. The app and bundled assets also load beneath a `/frameflow/` repository subpath.
-- Twenty-three frontend unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
-- Sixteen production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
+- Twenty-nine frontend unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
+- Twenty production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
 - Desktop visual inspection at 1440 × 960: pass; screenshot in `docs/studio.png`.
 - Viewport checks at 1024 × 768, 768 × 1024, and 390 × 844: output remains 9:16, no horizontal document overflow, annotation controls work. These use a desktop engine and pointer input, not Safari or Apple Pencil.
 
@@ -16,6 +16,9 @@ The newest local Chrome 156 / Playwright browser had a native rendering stall ev
 ## Live website and presenter checks
 
 - The studio defaults to a light color scheme with a white header, readable controls, and a clear preview. The content library, canvas board and inspector start closed. Each is reachable from the navigation bar.
+- Deletion regressions cover shared-source scenes, overlays, deliberately empty views, nearest-scene selection, contiguous numbering, direct scene deletion, clearing the last view, presenter retention and persistence after reload.
+- Website toolbar bounds remain fixed in both disconnected and shared states at 1440 × 960, 1024 × 768, 768 × 1024 and 390 × 844. The visible frame keeps its position and size through scroll/annotation switches and disconnect. The native sharing test also compares actual frame width and height before and after capture starts, including the browser’s sharing-related viewport reduction; the preview can recenter when available height changes.
+- Removing a captured asset stops its track and pauses a take, then permits resume on a surviving local scene and a playable vertical export. Sharing is retained across saved local views and released when its final website view is removed.
 - Shared presenter settings retain enabled state, position, scale and cutout mode through scene changes and reload. A pixel regression checks that camera pixels remain in the next scene.
 - The production background-removal worker loads its local WASM/model under the enforced CSP. A real sample portrait smoke check retained the person and produced transparent background pixels; no camera uploads occur.
 - A controlled live website confirms a 390 px inner viewport, form input, button interaction, page scrolling, annotation switching, capture compositing, and pause on sharing loss. Automated permission/stream behavior is deterministic; native Region Capture was additionally checked in a visible Brave/Chromium window, with the scrolled page color verified in the recording canvas. Element Capture was rejected after native testing produced stale whole-tab frames; the final implementation uses the verified Region Capture path.

@@ -86,6 +86,12 @@ npm run test:native-web
 
 Set `FRAMEFLOW_BROWSER_EXECUTABLE` if using an installed Chromium-family browser. This test opens a narrow local website that denies iframe embedding, shares it with native browser capture, forwards real wheel gestures, exercises source-window forms, annotates, and exports a playable vertical take. It uses no physical camera or microphone and needs a desktop display.
 
+## Keep scenes in sync
+
+Deleting a library asset removes it from every scene and removes views left without content by that deletion. Views with other layers remain intact. Scene cards renumber immediately, and deleting the active view selects a neighbour. Use the × on any scene card to remove an existing saved view; this keeps its source files in the library. Clearing the final view leaves one empty working scene with the shared presenter retained.
+
+Website controls occupy the normal preview toolbar, so connecting a tab, switching scroll/annotation modes, or disconnecting does not reduce the recording frame. A shared tab remains available while other saved scenes are shown. Removing its source or its final saved view ends sharing and pauses an active recording. Resume on a valid remaining scene when ready.
+
 ## Recording behavior
 
 - A dedicated **1080 × 1920** (or 720 × 1280) canvas is captured at a requested 30 fps. Actual delivered frame rate depends on device capacity.

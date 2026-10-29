@@ -70,7 +70,7 @@ export function Library({
       (filter === 'all' ||
         (filter === 'visuals'
           ? ['image', 'video', 'pdf'].includes(a.kind)
-          : ['text', 'article', 'shape', 'link'].includes(a.kind))) &&
+          : ['text', 'article', 'shape', 'link', 'webpage'].includes(a.kind))) &&
       (a.name.toLowerCase().includes(query.toLowerCase()) ||
         a.text?.toLowerCase().includes(query.toLowerCase())),
   );
@@ -278,7 +278,11 @@ export function Library({
           >
             <Type size={15} />
           </IconButton>
-          <IconButton label="Delete selected asset" onClick={() => onDelete(selected)}>
+          <IconButton
+            label="Delete selected asset"
+            title="Delete asset and scenes containing only this asset"
+            onClick={() => onDelete(selected)}
+          >
             <Trash2 size={15} />
           </IconButton>
         </div>

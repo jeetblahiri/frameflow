@@ -25,6 +25,9 @@ test('scrolls and records a real local website tab that denies iframe embedding'
     origin: new URL(page.url()).origin,
     permissions: ['capturedSurfaceControl'],
   });
+  await expect.poll(() => page.evaluate(() => innerWidth)).toBe(1440);
+  const initialFrame = (await page.getByTestId('composition').boundingBox())!;
+  const initialViewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   await page.getByRole('button', { name: 'Import content', exact: true }).click();
   await page.getByRole('button', { name: 'From a link' }).click();
   await page.getByLabel('Content URL').fill('http://127.0.0.1:4321');
@@ -41,6 +44,12 @@ test('scrolls and records a real local website tab that denies iframe embedding'
   await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible({
     timeout: 20000,
   });
+  const sharedFrame = (await page.getByTestId('composition').boundingBox())!;
+  for (const key of ['x', 'width', 'height'] as const)
+    expect(Math.abs(sharedFrame[key] - initialFrame[key])).toBeLessThan(1);
+  const sharedViewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  if (initialViewport.height === sharedViewport.height)
+    expect(Math.abs(sharedFrame.y - initialFrame.y)).toBeLessThan(1);
   const pixel = (expected: number[]) =>
     page
       .locator('.recording-canvas')
