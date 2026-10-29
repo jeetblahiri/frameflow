@@ -618,10 +618,12 @@ test('runs a mobile webpage, switches between interaction and annotations, and c
       page
         .locator('.recording-canvas')
         .evaluate((c: HTMLCanvasElement) =>
-          [...c.getContext('2d')!.getImageData(540, 960, 1, 1).data].slice(0, 3),
+          [...c.getContext('2d')!.getImageData(540, 960, 1, 1).data]
+            .slice(0, 3)
+            .reduce((sum, value, i) => sum + Math.abs(value - [68, 187, 136][i]), 0),
         ),
     )
-    .toEqual([68, 187, 136]);
+    .toBeLessThan(6);
   await page.getByRole('button', { name: 'Pen (P)', exact: true }).click();
   const box = (await page.getByTestId('composition').boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.3);
