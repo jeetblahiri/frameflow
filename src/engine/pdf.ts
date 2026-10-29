@@ -1,8 +1,8 @@
-/** Shared lazy PDF setup; every font and decoder stays on the app's own origin. */
+/** Shared lazy PDF setup with upstream compatibility polyfills; every font and decoder stays on the app's own origin. */
 export async function openPdf(data: Uint8Array) {
-  const pdf = await import('pdfjs-dist');
+  const pdf = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdf.GlobalWorkerOptions.workerSrc = (
-    await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+    await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
   ).default;
   const base = new URL(`${import.meta.env.BASE_URL}pdf-assets/`, document.baseURI).href;
   return pdf.getDocument({

@@ -35,9 +35,9 @@ function pdfFixture() {
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << >> /Contents 4 0 R >>',
-    '<< /Length 26 >>\nstream\n0.2 0.6 0.4 rg 0 0 300 400 re f\nendstream',
+    '<< /Length 32 >>\nstream\n0.2 0.6 0.4 rg 0 0 300 400 re f\nendstream',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << >> /Contents 6 0 R >>',
-    '<< /Length 26 >>\nstream\n0.6 0.2 0.4 rg 0 0 300 400 re f\nendstream',
+    '<< /Length 32 >>\nstream\n0.6 0.2 0.4 rg 0 0 300 400 re f\nendstream',
   ];
   let out = '%PDF-1.4\n';
   const offsets = [0];
@@ -484,4 +484,25 @@ test('imports a file dropped in the import dialog exactly once', async ({ page }
   const saved = await project(page);
   expect(saved.assets.filter((a) => a.name === 'dropped')).toHaveLength(1);
   await expect(page.locator('.global-drop')).toBeHidden();
+});
+
+test('renders PDF pages without the newest Map APIs', async ({ page }) => {
+  await page.evaluate(() => {
+    Reflect.deleteProperty(Map.prototype, 'getOrInsertComputed');
+    Reflect.deleteProperty(WeakMap.prototype, 'getOrInsertComputed');
+  });
+  await addFile(page, 'compatibility.pdf', 'application/pdf', pdfFixture());
+  await page.getByRole('button', { name: 'Focus compatibility', exact: true }).click();
+  await page.getByLabel('PDF page').selectOption('2');
+  await expect
+    .poll(() =>
+      page
+        .getByTestId('composition')
+        .evaluate((c: HTMLCanvasElement) =>
+          [...c.getContext('2d')!.getImageData(540, 960, 1, 1).data]
+            .slice(0, 3)
+            .reduce((total, value, i) => total + Math.abs(value - [153, 51, 102][i]), 0),
+        ),
+    )
+    .toBeLessThan(6);
 });

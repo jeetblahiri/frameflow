@@ -142,10 +142,10 @@ export class MediaLibrary {
       canvas.height = viewport.height;
       await p.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise;
       this.resources.set(key, { drawable: canvas });
-    } catch {
+    } catch (error) {
       this.fail(
         key,
-        `${asset.name}: this PDF page could not be read. Check whether the document is password protected.`,
+        `${asset.name}: PDF page could not be rendered. ${error instanceof Error ? error.message : 'Re-import the document or try an updated browser.'}`,
       );
     }
   }

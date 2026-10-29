@@ -7,7 +7,7 @@ Validated on 29 October 2026. This release is prepared for static HTTPS deployme
 - Strict TypeScript compilation: pass.
 - Production static build: pass. The app and bundled assets also load beneath a `/frameflow/` repository subpath.
 - Nineteen unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
-- Eleven production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
+- Twelve production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
 - Desktop visual inspection at 1440 × 960: pass; screenshot in `docs/studio.png`.
 - Viewport checks at 1024 × 768, 768 × 1024, and 390 × 844: output remains 9:16, no horizontal document overflow, annotation controls work. These use a desktop engine and pointer input, not Safari or Apple Pencil.
 
@@ -15,6 +15,7 @@ The newest local Chrome 156 / Playwright browser had a native rendering stall ev
 
 ## Production hardening
 
+- PDF imports use the upstream compatibility build and matching worker, with an explicit regression check for browsers missing the newest Map APIs.
 - PDF.js upgraded to 6.4.299 and Vitest to 5.0.5. The complete locked dependency graph reports zero known advisories with `npm audit` at validation time.
 - All archive model and media checks finish before persistent writes. Media receives fresh keys and is written atomically, protecting the existing project from rejected archives.
 - Both advertised and streamed archive expansion are bounded. Invalid references, coordinates, URL schemes, shapes and pages are rejected.
