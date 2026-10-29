@@ -71,6 +71,7 @@ const kinds: readonly AssetKind[] = [
   'article',
   'shape',
   'link',
+  'webpage',
 ];
 const tools: readonly Tool[] = [
   'pen',
@@ -113,6 +114,8 @@ function asset(value: unknown): Asset {
     }
     if (!['https:', 'http:'].includes(url.protocol))
       throw new Error('Only HTTP or HTTPS source links are allowed.');
+    if (url.username || url.password)
+      throw new Error('Source URLs cannot contain embedded credentials.');
     result.url = url.href;
   }
   if (a.src !== undefined && !result.blobKey) {
@@ -123,16 +126,21 @@ function asset(value: unknown): Asset {
   }
   if (['image', 'video', 'audio', 'pdf'].includes(result.kind) && !result.src && !result.blobKey)
     throw new Error(`Missing media reference: ${result.name}`);
+  if (result.kind === 'webpage' && !result.url)
+    throw new Error('A live webpage needs a source URL.');
   return result;
 }
 function camera(value: unknown): CameraConfig {
   const c = object(value, 'presenter');
   return {
+    ...(c.background !== undefined
+      ? { background: choice(c.background, ['original', 'remove'] as const, 'camera background') }
+      : {}),
     enabled: boolean(c.enabled, 'camera state'),
     shape: choice(c.shape, ['circle', 'rounded', 'square', 'wide'], 'presenter shape'),
-    x: number(c.x, 'camera X', -1, 1),
-    y: number(c.y, 'camera Y', -1, 1),
-    size: number(c.size, 'camera size', 0.01, 1),
+    x: number(c.x, 'camera X', -3, 3),
+    y: number(c.y, 'camera Y', -3, 3),
+    size: number(c.size, 'camera size', 0.01, 3),
     mirror: boolean(c.mirror, 'camera mirror'),
     border: color(c.border, 'camera border'),
     blur: number(c.blur, 'camera blur', 0, 40),
@@ -223,6 +231,7 @@ export function validateProject(value: unknown): Project {
     name: text(p.name, 'project name', 80),
     assets,
     scenes,
+    ...(p.presenter !== undefined ? { presenter: camera(p.presenter) } : {}),
     activeSceneId: scenes.some((s) => s.id === requested) ? requested : scenes[0].id,
     canvas: {
       x: number(canvas.x, 'workspace X', -1e6, 1e6),

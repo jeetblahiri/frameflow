@@ -130,10 +130,8 @@ export function ImportDialog({
             void importUrl(url)
               .then((a) => {
                 onAssets(a);
-                if (a[0]?.kind === 'link')
-                  notify(
-                    'Added a source reference. Import a screenshot or paste the article text to record its content.',
-                  );
+                if (a[0]?.kind === 'webpage')
+                  notify('Live mobile webpage added. Use Interact to scroll and Annotate to draw.');
                 onClose();
               })
               .catch((e) => setError(e.message))
@@ -154,8 +152,9 @@ export function ImportDialog({
           <div className="info-box">
             <Link2 size={18} />
             <p>
-              Direct media links import when the source allows browser access. Webpages and YouTube
-              links become reference cards; their protected content and audio cannot be captured.
+              Websites open live in a 390 px mobile viewport. Some sites block embedding; use a
+              separate tab for those. Recording a live page needs tab-sharing permission in desktop
+              Chrome or Edge.
             </p>
           </div>
           <button className="primary full" disabled={busy || !url}>

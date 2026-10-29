@@ -32,3 +32,17 @@ for (const [name, file] of [
     `${notices}/${name.replaceAll('/', '-').replace('@', '')}-${file}.txt`,
   );
 }
+
+const vision = fileURLToPath(new URL('../public/vision/', import.meta.url));
+mkdirSync(vision, { recursive: true });
+cpSync(
+  fileURLToPath(new URL('../node_modules/@mediapipe/tasks-vision/wasm/', import.meta.url)),
+  `${vision}/wasm`,
+  { recursive: true },
+);
+cpSync(
+  fileURLToPath(
+    new URL('../node_modules/@mediapipe/tasks-vision/vision_bundle.cjs', import.meta.url),
+  ),
+  `${vision}/vision_bundle.js`,
+);

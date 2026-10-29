@@ -34,7 +34,7 @@ export function AssetPreview({ asset, media }: { asset: Asset; media: MediaLibra
         <span>AUDIO TRACK</span>
       </div>
     );
-  if (asset.kind === 'link')
+  if (asset.kind === 'link' || asset.kind === 'webpage')
     return (
       <div className="media-preview">
         <Link2 size={28} />

@@ -20,7 +20,7 @@ Run `npm ci && npm run build` on Node.js 22.13 or later and deploy all of `dist/
 
 The generated HTML enforces a Content Security Policy which permits the application's local media and PDF WebAssembly decoder while blocking inline scripts, JavaScript eval, plugins and embedded frames. Inline styles are needed to position canvas objects. External HTTPS/HTTP fetches are permitted for explicit URL imports and still require source CORS permission.
 
-Hosts that support custom response headers should also set `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: camera=(self), microphone=(self), display-capture=()`, and `frame-ancestors 'none'` in the CSP header. GitHub Pages does not expose arbitrary response-header configuration; the HTML policy is the portable enforcement mechanism.
+Hosts that support custom response headers should also set `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: camera=(self), microphone=(self), display-capture=(self)`, and `frame-ancestors 'none'` in the CSP header. GitHub Pages does not expose arbitrary response-header configuration; the HTML policy is the portable enforcement mechanism.
 
 ## Local production verification
 

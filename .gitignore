@@ -12,3 +12,6 @@ coverage/
 .cache/
 
 public/pdf-assets/
+
+public/vision/wasm/
+public/vision/vision_bundle.*

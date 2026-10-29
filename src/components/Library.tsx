@@ -46,6 +46,7 @@ const icons = {
   article: FileText,
   shape: Shapes,
   link: Link2,
+  webpage: Link2,
 };
 export function Library({
   assets,
@@ -95,7 +96,7 @@ export function Library({
           <>
             <button className="import-button" onClick={onImport}>
               <Plus size={17} />
-              Import content<span>⌘ I</span>
+              Import files<span>⌘ I</span>
             </button>
             <label className="search-field">
               <Search size={15} />

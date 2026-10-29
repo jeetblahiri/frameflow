@@ -68,7 +68,7 @@ export function DeviceSettings({
           <h3>Presenter camera</h3>
           <span className={`status-dot ${engine.cameraOn ? 'on' : ''}`} />
         </div>
-        <CameraPreview stream={engine.cameraStream} />
+        {camera.background !== 'remove' && <CameraPreview stream={engine.cameraStream} />}
         <button
           className="secondary full"
           disabled={engine.deviceBusy}
@@ -77,53 +77,70 @@ export function DeviceSettings({
           {engine.cameraOn ? <VideoOff size={14} /> : <Camera size={14} />}{' '}
           {engine.cameraOn ? 'Turn camera off' : 'Enable camera'}
         </button>
-        <label className="field-label">
-          Camera
-          <select
-            aria-label="Camera device"
-            disabled={engine.deviceBusy}
-            value={engine.cameraId}
-            onChange={(e) => void engine.changeCamera(e.target.value)}
+        <div className="segmented presenter-background" aria-label="Camera background">
+          <button
+            className={camera.background !== 'remove' ? 'active' : ''}
+            onClick={() =>
+              update((c) => ({ ...c, camera: { ...c.camera, background: 'original' } }))
+            }
           >
-            <option value="">Default camera</option>
-            {engine.devices
-              .filter((d) => d.kind === 'videoinput')
-              .map((d, i) => (
-                <option value={d.deviceId} key={d.deviceId || i}>
-                  {d.label || `Camera ${i + 1}`}
-                </option>
-              ))}
-          </select>
-        </label>
-        <div className="camera-shapes">
-          {(
-            [
-              { shape: 'circle', icon: Circle },
-              { shape: 'rounded', icon: RectangleVertical },
-              { shape: 'square', icon: Square },
-              { shape: 'wide', icon: RectangleHorizontal },
-            ] as const
-          ).map(({ shape, icon: Icon }) => (
-            <IconButton
-              key={shape}
-              label={`${shape} camera`}
-              active={camera.shape === shape}
-              onClick={() =>
-                update((c) => ({
-                  ...c,
-                  camera: {
-                    ...c.camera,
-                    shape,
-                    x: shape === 'wide' ? 0.05 : c.camera.x,
-                    size: shape === 'wide' ? 0.9 : c.camera.size > 0.6 ? 0.29 : c.camera.size,
-                  },
-                }))
-              }
-            >
-              <Icon size={18} />
-            </IconButton>
-          ))}
+            Original
+          </button>
+          <button
+            className={camera.background === 'remove' ? 'active' : ''}
+            onClick={() => update((c) => ({ ...c, camera: { ...c.camera, background: 'remove' } }))}
+          >
+            Remove background
+          </button>
         </div>
+        {camera.background === 'remove' && (
+          <p
+            className={engine.presenterStatus === 'error' ? 'inline-error' : 'help-text'}
+            role="status"
+          >
+            {engine.presenterStatus === 'error'
+              ? 'Background removal could not start. Choose Original or switch modes to retry.'
+              : engine.presenterStatus === 'loading'
+                ? 'Preparing background removal on your device…'
+                : engine.presenterStatus === 'ready'
+                  ? 'Background removal ready · processed on this device.'
+                  : 'Enable the camera to prepare background removal.'}
+          </p>
+        )}
+        <p className="help-text">Your presenter stays with you across every scene.</p>
+        {camera.background !== 'remove' && (
+          <>
+            <div className="camera-shapes">
+              {(
+                [
+                  { shape: 'circle', icon: Circle },
+                  { shape: 'rounded', icon: RectangleVertical },
+                  { shape: 'square', icon: Square },
+                  { shape: 'wide', icon: RectangleHorizontal },
+                ] as const
+              ).map(({ shape, icon: Icon }) => (
+                <IconButton
+                  key={shape}
+                  label={`${shape} camera`}
+                  active={camera.shape === shape}
+                  onClick={() =>
+                    update((c) => ({
+                      ...c,
+                      camera: {
+                        ...c.camera,
+                        shape,
+                        x: shape === 'wide' ? 0.05 : c.camera.x,
+                        size: shape === 'wide' ? 0.9 : c.camera.size > 0.6 ? 0.29 : c.camera.size,
+                      },
+                    }))
+                  }
+                >
+                  <Icon size={18} />
+                </IconButton>
+              ))}
+            </div>
+          </>
+        )}
         <Toggle
           label="Show presenter in frame"
           checked={camera.enabled}
@@ -141,29 +158,92 @@ export function DeviceSettings({
         <Range
           label="Camera size"
           value={camera.size}
-          min={0.15}
-          max={0.95}
+          min={0.1}
+          max={3}
           onChange={(size) =>
             update((c) => ({
               ...c,
-              camera: { ...c.camera, size, x: Math.min(c.camera.x, 1 - size) },
+              camera: { ...c.camera, size },
             }))
           }
         />
-        <label className="color-field">
-          Border color
-          <input
-            aria-label="Camera border color"
-            type="color"
-            value={camera.border || '#ffffff'}
-            onChange={(e) =>
-              update((c) => ({ ...c, camera: { ...c.camera, border: e.target.value } }))
+        <Range
+          label="Presenter horizontal position"
+          value={camera.x}
+          min={-2}
+          max={1}
+          onChange={(x) => update((c) => ({ ...c, camera: { ...c.camera, x } }))}
+        />
+        <Range
+          label="Presenter vertical position"
+          value={camera.y}
+          min={-2}
+          max={1}
+          onChange={(y) => update((c) => ({ ...c, camera: { ...c.camera, y } }))}
+        />
+        <div className="segmented">
+          <button
+            onClick={() =>
+              update((c) => ({ ...c, camera: { ...c.camera, x: 0.65, y: 0.73, size: 0.29 } }))
             }
-          />
-        </label>
-        <small className="muted">Drag your presenter inside the frame to reposition.</small>
+          >
+            Corner
+          </button>
+          <button
+            onClick={() =>
+              update((c) => ({ ...c, camera: { ...c.camera, x: 0, y: 0.35, size: 1 } }))
+            }
+          >
+            Full width
+          </button>
+          <button
+            onClick={() =>
+              update((c) => ({ ...c, camera: { ...c.camera, x: -0.5, y: 0.25, size: 2 } }))
+            }
+          >
+            Close-up
+          </button>
+        </div>
+        {camera.background !== 'remove' && (
+          <label className="color-field">
+            Border color
+            <input
+              aria-label="Camera border color"
+              type="color"
+              value={camera.border || '#ffffff'}
+              onChange={(e) =>
+                update((c) => ({ ...c, camera: { ...c.camera, border: e.target.value } }))
+              }
+            />
+          </label>
+        )}
+        <small className="muted">
+          Use the select tool to drag or resize your presenter. Size can extend beyond the frame.
+        </small>
+        <details className="advanced-settings">
+          <summary>Camera device</summary>{' '}
+          <label className="field-label">
+            Camera
+            <select
+              aria-label="Camera device"
+              disabled={engine.deviceBusy}
+              value={engine.cameraId}
+              onChange={(e) => void engine.changeCamera(e.target.value)}
+            >
+              <option value="">Default camera</option>
+              {engine.devices
+                .filter((d) => d.kind === 'videoinput')
+                .map((d, i) => (
+                  <option value={d.deviceId} key={d.deviceId || i}>
+                    {d.label || `Camera ${i + 1}`}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </details>
       </section>
-      <section className="settings-section">
+      <details className="settings-section advanced-settings">
+        <summary>Audio mixer</summary>
         <div className="section-label">
           <Mic size={15} />
           <h3>Audio mixer</h3>
@@ -234,8 +314,9 @@ export function DeviceSettings({
             ? 'Clipping detected. Lower your input gain.'
             : 'Microphone monitoring is off to avoid feedback.'}
         </div>
-      </section>
-      <section className="settings-section">
+      </details>
+      <details className="settings-section advanced-settings">
+        <summary>Recording output</summary>
         <div className="section-label">
           <SlidersHorizontal size={15} />
           <h3>Recording output</h3>
@@ -261,7 +342,7 @@ export function DeviceSettings({
           30 fps. MP4 when the browser supports it; WebM otherwise. Your download always keeps its
           original format.
         </p>
-      </section>
+      </details>
     </div>
   );
 }
@@ -329,91 +410,101 @@ export function FocusSettings({
                 <SlidersHorizontal size={14} />
               </IconButton>
             </div>
-            <div className="segmented">
-              <button
-                className={layer.fit === 'contain' ? 'active' : ''}
-                onClick={() => patch({ fit: 'contain', zoom: 1, panX: 0, panY: 0 })}
-              >
-                Fit
-              </button>
-              <button
-                className={layer.fit === 'cover' ? 'active' : ''}
-                onClick={() => patch({ fit: 'cover', zoom: 1, panX: 0, panY: 0 })}
-              >
-                Fill / crop
-              </button>
-              <IconButton
-                label="Reset focus view"
-                onClick={() => patch({ zoom: 1, panX: 0, panY: 0, x: 0, y: 0, w: 1, h: 1 })}
-              >
-                <RotateCcw size={14} />
-              </IconButton>
-            </div>
-            <Range
-              label="Focus zoom"
-              value={layer.zoom}
-              min={0.25}
-              max={4}
-              step={0.05}
-              onChange={(zoom) => patch({ zoom })}
-            />
-            <Range
-              label="Horizontal pan"
-              value={layer.panX}
-              min={-1}
-              max={1}
-              onChange={(panX) => patch({ panX })}
-            />
-            <Range
-              label="Vertical pan"
-              value={layer.panY}
-              min={-1}
-              max={1}
-              onChange={(panY) => patch({ panY })}
-            />
-            <div className="two-fields">
-              <label>
-                Position X
-                <input
-                  aria-label="Layer X"
-                  type="number"
-                  min={-100}
-                  max={100}
-                  value={Math.round(layer.x * 100)}
-                  onChange={(e) => patch({ x: Number(e.target.value) / 100 })}
+            {asset.kind === 'webpage' ? (
+              <p className="help-text">
+                Live mobile page · 390 px viewport. Use Interact above the frame to scroll or use
+                forms. Switch to Annotate / move to draw. Connect capture before recording. Marks
+                stay at their frame positions as the page scrolls.
+              </p>
+            ) : (
+              <>
+                <div className="segmented">
+                  <button
+                    className={layer.fit === 'contain' ? 'active' : ''}
+                    onClick={() => patch({ fit: 'contain', zoom: 1, panX: 0, panY: 0 })}
+                  >
+                    Fit
+                  </button>
+                  <button
+                    className={layer.fit === 'cover' ? 'active' : ''}
+                    onClick={() => patch({ fit: 'cover', zoom: 1, panX: 0, panY: 0 })}
+                  >
+                    Fill / crop
+                  </button>
+                  <IconButton
+                    label="Reset focus view"
+                    onClick={() => patch({ zoom: 1, panX: 0, panY: 0, x: 0, y: 0, w: 1, h: 1 })}
+                  >
+                    <RotateCcw size={14} />
+                  </IconButton>
+                </div>
+                <Range
+                  label="Focus zoom"
+                  value={layer.zoom}
+                  min={0.25}
+                  max={4}
+                  step={0.05}
+                  onChange={(zoom) => patch({ zoom })}
                 />
-              </label>
-              <label>
-                Position Y
-                <input
-                  aria-label="Layer Y"
-                  type="number"
-                  min={-100}
-                  max={100}
-                  value={Math.round(layer.y * 100)}
-                  onChange={(e) => patch({ y: Number(e.target.value) / 100 })}
+                <Range
+                  label="Horizontal pan"
+                  value={layer.panX}
+                  min={-1}
+                  max={1}
+                  onChange={(panX) => patch({ panX })}
                 />
-              </label>
-            </div>
-            <Range
-              label="Layer width"
-              value={layer.w}
-              min={0.1}
-              max={1.5}
-              onChange={(w) => patch({ w })}
-            />
-            <Range
-              label="Layer height"
-              value={layer.h}
-              min={0.1}
-              max={1.5}
-              onChange={(h) => patch({ h })}
-            />
-            <Range
-              label="Opacity"
-              value={layer.opacity}
-              onChange={(opacity) => patch({ opacity })}
-            />
+                <Range
+                  label="Vertical pan"
+                  value={layer.panY}
+                  min={-1}
+                  max={1}
+                  onChange={(panY) => patch({ panY })}
+                />
+                <div className="two-fields">
+                  <label>
+                    Position X
+                    <input
+                      aria-label="Layer X"
+                      type="number"
+                      min={-100}
+                      max={100}
+                      value={Math.round(layer.x * 100)}
+                      onChange={(e) => patch({ x: Number(e.target.value) / 100 })}
+                    />
+                  </label>
+                  <label>
+                    Position Y
+                    <input
+                      aria-label="Layer Y"
+                      type="number"
+                      min={-100}
+                      max={100}
+                      value={Math.round(layer.y * 100)}
+                      onChange={(e) => patch({ y: Number(e.target.value) / 100 })}
+                    />
+                  </label>
+                </div>
+                <Range
+                  label="Layer width"
+                  value={layer.w}
+                  min={0.1}
+                  max={1.5}
+                  onChange={(w) => patch({ w })}
+                />
+                <Range
+                  label="Layer height"
+                  value={layer.h}
+                  min={0.1}
+                  max={1.5}
+                  onChange={(h) => patch({ h })}
+                />
+                <Range
+                  label="Opacity"
+                  value={layer.opacity}
+                  onChange={(opacity) => patch({ opacity })}
+                />
+              </>
+            )}
             {asset.kind === 'pdf' && (
               <label className="field-label">
                 Document page

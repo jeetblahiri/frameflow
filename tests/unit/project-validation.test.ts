@@ -72,3 +72,51 @@ describe('archive expansion limits', () => {
     await expect(readArchiveEntry(opened.file('data.txt')!, 100)).rejects.toThrow('size limit');
   });
 });
+
+describe('live web and shared presenter persistence', () => {
+  it('roundtrips free-position cutouts while retaining compatibility with older projects', () => {
+    const p = createSampleProject();
+    expect(validateProject(p).presenter).toBeUndefined();
+    p.presenter = {
+      ...p.scenes[0].composition.camera,
+      background: 'remove',
+      size: 2.5,
+      x: -1.4,
+      y: -0.4,
+      enabled: true,
+    };
+    p.assets.push({
+      id: 'live-page',
+      kind: 'webpage',
+      name: 'Live',
+      url: 'https://example.com/',
+      width: 390,
+      height: 693,
+      x: 0,
+      y: 0,
+      boardWidth: 240,
+    });
+    const restored = validateProject(p);
+    expect(restored.presenter).toEqual(p.presenter);
+    expect(restored.assets.at(-1)?.kind).toBe('webpage');
+  });
+  it('rejects unsafe or missing live-page URLs and out-of-bounds presenter data', () => {
+    const p = createSampleProject();
+    p.assets.push({
+      id: 'live-page',
+      kind: 'webpage',
+      name: 'Live',
+      width: 390,
+      height: 693,
+      x: 0,
+      y: 0,
+      boardWidth: 240,
+    });
+    expect(() => validateProject(p)).toThrow('source URL');
+    p.assets.at(-1)!.url = 'https://user:password@example.com/';
+    expect(() => validateProject(p)).toThrow('credentials');
+    p.assets.at(-1)!.url = 'https://example.com/';
+    p.presenter = { ...p.scenes[0].composition.camera, size: 4 };
+    expect(() => validateProject(p)).toThrow('camera size');
+  });
+});

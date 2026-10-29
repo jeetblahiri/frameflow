@@ -31,7 +31,6 @@ import {
   Plus,
   RectangleHorizontal,
   Scan,
-  Settings2,
   Slash,
   Square,
   Trash2,
@@ -55,6 +54,7 @@ import {
 } from './lib/storage';
 import { exportProject, importFile, importProject } from './lib/importers';
 import { useEngine } from './hooks/useEngine';
+import { useWebCapture } from './hooks/useWebCapture';
 import { Library } from './components/Library';
 import { SpatialCanvas } from './components/SpatialCanvas';
 import { Presentation } from './components/Presentation';
@@ -86,14 +86,16 @@ export default function App() {
   const [project, setProject] = useState<Project | null>(null),
     [saved, setSaved] = useState<'saving' | 'saved' | 'error'>('saved');
   const [selected, setSelected] = useState<string | null>('cover'),
-    [leftOpen, setLeftOpen] = useState(() => window.innerWidth > 850),
-    [rightOpen, setRightOpen] = useState(() => window.innerWidth > 620),
+    [leftOpen, setLeftOpen] = useState(false),
+    [rightOpen, setRightOpen] = useState(false),
     [rightTab, setRightTab] = useState('script'),
     [dialog, setDialog] = useState<Dialog>(null),
     [editingAsset, setEditingAsset] = useState<Asset | null>(null),
     [isNewAsset, setIsNewAsset] = useState(false),
     [menu, setMenu] = useState(false),
     [focusMode, setFocusMode] = useState(false),
+    [showCanvas, setShowCanvas] = useState(false),
+    [moreTools, setMoreTools] = useState(false),
     [hand, setHand] = useState(false),
     [tool, setTool] = useState<Tool>('select'),
     [color, setColor] = useState('#d4ee99'),
@@ -132,10 +134,24 @@ export default function App() {
     [notify],
   );
   const engine = useEngine(notify, onTake);
+  const web = useWebCapture(() => {
+    if (engine.recorder.state === 'recording') engine.recorder.pause();
+  }, notify);
+  useEffect(() => {
+    if (
+      web.mode === 'embedded' &&
+      dialog &&
+      dialog !== 'record' &&
+      engine.recorder.state === 'recording'
+    )
+      engine.recorder.pause();
+  }, [dialog, web.mode, engine.recorder]);
   const active = project?.scenes.find((s) => s.id === project.activeSceneId) || project?.scenes[0];
-  const composition = active?.composition;
-  const stateRef = useRef({ project, engine, active });
-  stateRef.current = { project, engine, active };
+  const composition = active
+    ? { ...active.composition, camera: project?.presenter || active.composition.camera }
+    : undefined;
+  const stateRef = useRef({ project, engine, active, web });
+  stateRef.current = { project, engine, active, web };
   const update = useCallback(
     (fn: (p: Project) => Project) =>
       setProject((p) => (p ? { ...fn(p), updatedAt: Date.now() } : p)),
@@ -143,12 +159,22 @@ export default function App() {
   );
   const updateComposition = useCallback(
     (fn: (c: Composition) => Composition) =>
-      update((p) => ({
-        ...p,
-        scenes: p.scenes.map((s) =>
-          s.id === p.activeSceneId ? { ...s, composition: fn(s.composition) } : s,
-        ),
-      })),
+      update((p) => {
+        const current = p.scenes.find((s) => s.id === p.activeSceneId)!;
+        const changed = fn({
+          ...current.composition,
+          camera: p.presenter || current.composition.camera,
+        });
+        return {
+          ...p,
+          presenter: changed.camera,
+          scenes: p.scenes.map((s) => ({
+            ...s,
+            composition:
+              s.id === p.activeSceneId ? changed : { ...s.composition, camera: changed.camera },
+          })),
+        };
+      }),
     [update],
   );
   useEffect(() => {
@@ -213,6 +239,19 @@ export default function App() {
       const p = stateRef.current.project;
       const scene = p?.scenes.find((s) => s.id === id);
       if (!scene) return;
+      if (
+        engine.recorder.state !== 'idle' &&
+        web.mode === 'off' &&
+        scene.composition.layers.some(
+          (l) => p!.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+        )
+      ) {
+        notify(
+          'Connect website capture before switching to a live webpage during a take.',
+          'error',
+        );
+        return;
+      }
       for (const l of scene.composition.layers) {
         const a = p!.assets.find((a) => a.id === l.assetId);
         if (a) engine.media.ensure(a, l.page);
@@ -220,7 +259,7 @@ export default function App() {
       engine.media.pauseVideosExcept(scene.composition.layers.map((l) => l.assetId));
       update((p) => ({ ...p, activeSceneId: id }));
     },
-    [engine.media, update],
+    [engine.media, engine.recorder, web.mode, update, notify],
   );
   const navigate = useCallback(
     (delta: number) => {
@@ -236,11 +275,17 @@ export default function App() {
     (assets: Asset[]) => {
       update((p) => ({ ...p, assets: [...p.assets, ...assets] }));
       setSelected(assets.at(-1)?.id || null);
+      const webpage = assets.find((a) => a.kind === 'webpage');
+      if (webpage) updateComposition((c) => ({ ...c, layers: [layerFor(webpage)] }));
+      else {
+        setLeftOpen(true);
+        setRightOpen(false);
+      }
       notify(
         `Added ${assets.length === 1 ? assets[0].name : `${assets.length} assets`} to your workspace.`,
       );
     },
-    [update, notify],
+    [update, updateComposition, notify],
   );
   const processFiles = useCallback(
     async (files: File[]) => {
@@ -279,6 +324,7 @@ export default function App() {
     }));
     setRightTab('focus');
     setRightOpen(true);
+    setLeftOpen(false);
     engine.media.pauseVideosExcept([asset.id]);
     notify(add ? 'Added a layer to your frame.' : 'In frame. Adjust the view with Focus Lens.');
   };
@@ -417,13 +463,21 @@ export default function App() {
           engine.recorder.pause();
         } else if (engine.recorder.state === 'paused') {
           e.preventDefault();
-          engine.recorder.resume();
+          const latest = stateRef.current;
+          if (
+            latest.web.mode === 'off' &&
+            latest.active?.composition.layers.some(
+              (l) => latest.project?.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+            )
+          )
+            notify('Reconnect website capture before resuming this take.', 'error');
+          else engine.recorder.resume();
         }
       }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [navigate, updateComposition, engine.recorder]);
+  }, [navigate, updateComposition, engine.recorder, notify]);
   useEffect(() => {
     const paste = (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
@@ -472,7 +526,7 @@ export default function App() {
   const locked = engine.state !== 'idle';
   return (
     <div
-      className={`app-shell ${!leftOpen || focusMode ? 'left-collapsed' : ''} ${!rightOpen || focusMode ? 'right-collapsed' : ''} ${focusMode ? 'distraction-free' : ''}`}
+      className={`app-shell studio-v3 ${!leftOpen || focusMode ? 'left-collapsed' : ''} ${!rightOpen || focusMode ? 'right-collapsed' : ''} ${focusMode ? 'distraction-free' : ''}`}
       onDragEnter={(e) => {
         if (e.dataTransfer.types.includes('Files')) {
           e.preventDefault();
@@ -587,10 +641,6 @@ export default function App() {
           </span>
         </span>
         <div className="header-actions">
-          <span className="studio-pill">
-            <i />
-            STUDIO
-          </span>
           <IconButton label="Help and shortcuts" onClick={() => setDialog('help')}>
             <CircleHelp size={18} />
           </IconButton>
@@ -609,39 +659,58 @@ export default function App() {
           </button>
         </div>
       </header>
-      <div className="studio-topbar">
-        <div className="workspace-title">
-          <span className="eyebrow">THE CREATOR STUDIO</span>
-          <h1>
-            Your ideas, in frame<span>.</span>
-          </h1>
-        </div>
-        <div className="topbar-center">
-          <span className="little-orbit">◎</span>Unlimited content.<span>One constant frame.</span>
-        </div>
-        <div className="view-toggles">
-          <IconButton
-            label="Toggle content library"
-            active={leftOpen && !focusMode}
-            onClick={() => {
-              setFocusMode(false);
-              setLeftOpen(!leftOpen);
-            }}
-          >
-            <LayoutPanelLeft size={17} />
-          </IconButton>
-          <IconButton
-            label="Toggle script and controls"
-            active={rightOpen && !focusMode}
-            onClick={() => {
-              setFocusMode(false);
-              setRightOpen(!rightOpen);
-            }}
-          >
-            <Settings2 size={17} />
-          </IconButton>
-        </div>
-      </div>
+      <nav className="studio-nav" aria-label="Studio tools">
+        <h1 className="sr-only">Your ideas, in frame</h1>
+        <button
+          className={leftOpen ? 'active' : ''}
+          aria-label="Toggle content library"
+          aria-expanded={leftOpen}
+          onClick={() => {
+            setLeftOpen(!leftOpen);
+            setRightOpen(false);
+            setFocusMode(false);
+          }}
+        >
+          <LayoutPanelLeft size={16} />
+          Content
+        </button>
+        <button
+          className={rightOpen && rightTab === 'script' ? 'active' : ''}
+          onClick={() => {
+            setRightTab('script');
+            setRightOpen(!(rightOpen && rightTab === 'script'));
+            setLeftOpen(false);
+            setFocusMode(false);
+          }}
+        >
+          <PenLine size={16} />
+          Script
+        </button>
+        <button
+          className={rightOpen && rightTab === 'settings' ? 'active' : ''}
+          onClick={() => {
+            setRightTab('settings');
+            setRightOpen(!(rightOpen && rightTab === 'settings'));
+            setLeftOpen(false);
+            setFocusMode(false);
+          }}
+        >
+          <Camera size={16} />
+          Presenter
+        </button>
+        <button
+          className={showCanvas ? 'active' : ''}
+          aria-pressed={showCanvas}
+          onClick={() => setShowCanvas(!showCanvas)}
+        >
+          <Layers2 size={16} />
+          Canvas
+        </button>
+        <button className="primary" aria-label="Import content" onClick={() => setDialog('import')}>
+          <Plus size={16} />
+          Add content
+        </button>
+      </nav>
       <main className="studio-layout">
         {leftOpen && !focusMode && (
           <Library
@@ -706,11 +775,13 @@ export default function App() {
             media={engine.media}
             hand={hand}
             setHand={setHand}
-            focusMode={focusMode}
-            setFocusMode={setFocusMode}
+            focusMode={!showCanvas || focusMode}
+            setFocusMode={(v) => setShowCanvas(!v)}
           >
             <Presentation
               canvasRef={canvasRef}
+              web={web}
+              presenter={engine.presenter}
               composition={{
                 ...composition,
                 camera: {
@@ -734,7 +805,12 @@ export default function App() {
           </SpatialCanvas>
           <div className="annotation-bar">
             <div className="annotation-tools">
-              {DRAW_TOOLS.map(({ id, label, icon: Icon }) => (
+              {DRAW_TOOLS.filter(
+                (t) =>
+                  moreTools ||
+                  ['select', 'pen', 'highlighter', 'eraser'].includes(t.id) ||
+                  tool === t.id,
+              ).map(({ id, label, icon: Icon }) => (
                 <IconButton
                   key={id}
                   label={label}
@@ -747,6 +823,13 @@ export default function App() {
                   <Icon size={16} />
                 </IconButton>
               ))}
+              <IconButton
+                label="More annotation tools"
+                active={moreTools}
+                onClick={() => setMoreTools(!moreTools)}
+              >
+                <MoreHorizontal size={16} />
+              </IconButton>
             </div>
             <span className="divider" />
             <label className="annotation-color" title="Annotation color">
@@ -970,6 +1053,7 @@ export default function App() {
             label="Audio and device settings"
             onClick={() => {
               setRightTab('settings');
+              setLeftOpen(false);
               setRightOpen(true);
               setFocusMode(false);
             }}
@@ -988,7 +1072,13 @@ export default function App() {
                 className="pause-button"
                 aria-label={engine.state === 'paused' ? 'Resume recording' : 'Pause recording'}
                 onClick={() =>
-                  engine.state === 'paused' ? engine.recorder.resume() : engine.recorder.pause()
+                  engine.state === 'paused'
+                    ? composition.layers.some(
+                        (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+                      ) && web.mode === 'off'
+                      ? notify('Reconnect website capture before resuming this take.', 'error')
+                      : engine.recorder.resume()
+                    : engine.recorder.pause()
                 }
               >
                 {engine.state === 'paused' ? <Play size={18} /> : <Pause size={18} />}
@@ -1008,7 +1098,22 @@ export default function App() {
                       'Recover or discard the interrupted take before recording again.',
                       'error',
                     )
-                  : setDialog('record')
+                  : composition.layers.some(
+                        (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+                      ) && web.mode === 'off'
+                    ? notify(
+                        'Connect website capture above the frame before recording this live page.',
+                        'error',
+                      )
+                    : composition.camera.enabled &&
+                        engine.cameraOn &&
+                        composition.camera.background === 'remove' &&
+                        engine.presenterStatus !== 'ready'
+                      ? notify(
+                          'Wait for background removal to be ready, or choose Original in Presenter settings.',
+                          'error',
+                        )
+                      : setDialog('record')
               }
             >
               {locked ? (
@@ -1076,7 +1181,23 @@ export default function App() {
           assets={project.assets}
           width={outputWidth}
           onStart={async () => {
+            if (
+              composition.layers.some(
+                (l) => project.assets.find((a) => a.id === l.assetId)?.kind === 'webpage',
+              ) &&
+              web.mode === 'off'
+            ) {
+              notify('Reconnect website capture before starting this take.', 'error');
+              return;
+            }
             if (canvasRef.current) {
+              if (web.mode === 'embedded') {
+                setDialog(null);
+                await new Promise<void>((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                );
+                await new Promise((resolve) => setTimeout(resolve, 150));
+              }
               const started = await engine.start(
                 canvasRef.current,
                 composition,
@@ -1084,6 +1205,7 @@ export default function App() {
                 project.name,
               );
               if (started) setDialog(null);
+              else setDialog('record');
             }
           }}
         />

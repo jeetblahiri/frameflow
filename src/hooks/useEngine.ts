@@ -3,6 +3,7 @@ import type { Asset, Composition, RecordingState, Take } from '../model';
 import { AudioMixer } from '../engine/audio';
 import { MediaLibrary } from '../engine/media';
 import { StudioRecorder } from '../engine/recorder';
+import { PresenterProcessor, type PresenterStatus } from '../engine/presenter';
 export function useEngine(
   notify: (message: string, type?: 'error' | 'success') => void,
   onTake: (take: Take) => void,
@@ -10,6 +11,26 @@ export function useEngine(
   const [mixer] = useState(() => new AudioMixer());
   const [media] = useState(() => new MediaLibrary());
   const [recorder] = useState(() => new StudioRecorder());
+  const [presenter] = useState(() => new PresenterProcessor());
+  const [presenterStatus, setPresenterStatus] = useState<PresenterStatus>('off');
+  useEffect(() => {
+    presenter.onStatus = (status) => {
+      setPresenterStatus(status);
+      if (status === 'error') {
+        if (recorder.state === 'recording') recorder.pause();
+        notify(
+          'Background removal stopped. Choose Original in Presenter settings or switch modes to retry.',
+          'error',
+        );
+      } else if (status === 'loading' && recorder.state === 'recording') {
+        recorder.pause();
+        notify(
+          'Recording paused while background removal prepares. Resume when the cutout is ready.',
+        );
+      }
+    };
+    return () => presenter.dispose();
+  }, [presenter, recorder, notify]);
   const [state, setState] = useState<RecordingState>('idle'),
     [duration, setDuration] = useState(0),
     [cameraOn, setCameraOn] = useState(false),
@@ -236,6 +257,8 @@ export function useEngine(
     }
   };
   return {
+    presenter,
+    presenterStatus,
     mixer,
     media,
     recorder,

@@ -84,6 +84,8 @@ test('keeps canvas movement and Focus Lens transforms independent, and persists 
   await expect(page.getByTestId('composition')).toHaveJSProperty('height', 1920);
   await page.waitForTimeout(800);
   const before = await project(page);
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle content library', exact: true }).click();
   const card = page.locator('[data-asset="cover"] .board-preview');
   const box = await card.boundingBox();
   expect(box).toBeTruthy();
@@ -210,7 +212,9 @@ test('records camera, microphone, annotations, scene changes and pause/resume in
   await page.getByRole('button', { name: /Recordings/ }).click();
   await expect(page.getByLabel('Recording preview')).toBeVisible();
 });
-test('surfaces denied permissions and records safe external reference cards', async ({ page }) => {
+test('surfaces denied permissions and opens websites in a live mobile viewport', async ({
+  page,
+}) => {
   await page.evaluate(() => {
     navigator.mediaDevices.getUserMedia = async () => {
       throw new DOMException('denied', 'NotAllowedError');
@@ -223,7 +227,13 @@ test('surfaces denied permissions and records safe external reference cards', as
   await page.getByLabel('Content URL').fill('https://www.youtube.com/watch?v=example');
   await page.getByRole('button', { name: 'Add to library' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(page.getByRole('status')).toContainText('source reference');
+  await expect(page.locator('iframe.mobile-webpage')).toHaveAttribute(
+    'src',
+    'https://www.youtube.com/watch?v=example',
+  );
+  await expect(page.getByRole('button', { name: 'Connect website capture' })).toBeVisible();
+  await page.getByRole('button', { name: 'Start recording', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Connect website capture');
 });
 test('restores recoverable recording chunks after an interrupted session', async ({ page }) => {
   await start(page);
@@ -264,7 +274,7 @@ test('supports tablet and portrait layouts with a fixed vertical output and anno
 test('mixes local video, an imported audio track and microphone without resetting the take', async ({
   page,
 }, testInfo) => {
-  await page.locator('.stage-top').click();
+  await page.getByRole('button', { name: 'Canvas', exact: true }).click();
   const videoBytes = await page.evaluate(async () => {
     const canvas = document.createElement('canvas');
     canvas.width = 360;
@@ -505,4 +515,130 @@ test('renders PDF pages without the newest Map APIs', async ({ page }) => {
         ),
     )
     .toBeLessThan(6);
+});
+
+test('starts with a quiet studio and keeps the presenter across scenes, including large cutouts', async ({
+  page,
+}) => {
+  await expect(page.locator('.library')).toBeHidden();
+  await expect(page.locator('.controls-panel')).toBeHidden();
+  await expect(page.locator('.canvas-world')).toBeHidden();
+  await page.getByRole('button', { name: 'Enable camera', exact: true }).click();
+  await page.getByRole('button', { name: 'Presenter', exact: true }).click();
+  await page.getByRole('slider', { name: 'Camera size', exact: true }).fill('1.4');
+  await page.getByRole('slider', { name: 'Presenter horizontal position' }).fill('-0.3');
+  await page.getByRole('slider', { name: 'Presenter vertical position' }).fill('0.2');
+  await page.getByRole('button', { name: 'Next scene', exact: true }).click();
+  await page.waitForTimeout(800);
+  let saved = await project(page);
+  expect(saved.presenter).toMatchObject({ enabled: true, size: 1.4, x: -0.3, y: 0.2 });
+  expect(
+    saved.scenes.every((s) => s.composition.camera.enabled && s.composition.camera.size === 1.4),
+  ).toBe(true);
+  // Pixel evidence that the live camera is still composited in the second scene.
+  await expect
+    .poll(() =>
+      page.locator('.recording-canvas').evaluate((c: HTMLCanvasElement) => {
+        const p = c.getContext('2d')!.getImageData(500, 650, 1, 1).data;
+        return p[1] > p[0] + 40 && p[1] > p[2] + 40;
+      }),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Remove background', exact: true }).click();
+  await expect(page.getByText('Background removal ready · processed on this device.')).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByRole('button', { name: 'Next scene', exact: true }).click();
+  await page.waitForTimeout(800);
+  saved = await project(page);
+  expect(saved.presenter?.background).toBe('remove');
+  await page.reload();
+  await page.getByRole('button', { name: 'Presenter', exact: true }).click();
+  await expect(page.getByRole('slider', { name: 'Camera size', exact: true })).toHaveValue('1.4');
+  await expect(page.getByRole('button', { name: 'Remove background', exact: true })).toHaveClass(
+    /active/,
+  );
+});
+
+test('runs a mobile webpage, switches between interaction and annotations, and composes a permitted capture', async ({
+  page,
+}) => {
+  await page.route('https://mobile.frameflow.test/', (r) =>
+    r.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;background:#44bb88}section{height:1000px}footer{height:1000px;background:#ee4488}@media(min-width:500px){body{background:red}}</style><section><input aria-label="Your name"><button onclick="this.textContent='Clicked'">Try me</button></section><footer>Footer</footer>`,
+    }),
+  );
+  // Deterministic stand-in for the browser permission dialog and screen pixels.
+  // Actual frame cropping is additionally checked in the manual Chromium smoke test.
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'CropTarget', {
+      value: {
+        fromElement: async (el: Element) => {
+          if (!el.classList.contains('output-border')) throw new Error('Wrong capture target');
+          return { target: true };
+        },
+      },
+      configurable: true,
+    });
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 390;
+      canvas.height = 693;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#44bb88';
+      ctx.fillRect(0, 0, 390, 693);
+      const stream = canvas.captureStream(30);
+      setInterval(() => ctx.fillRect(0, 0, 390, 693), 33);
+      const track = stream.getVideoTracks()[0] as MediaStreamTrack & {
+        cropTo: () => Promise<void>;
+      };
+      track.cropTo = async () => {};
+      (window as Window & { testWebStream?: MediaStream }).testWebStream = stream;
+      return stream;
+    };
+  });
+  await page.getByRole('button', { name: 'Import content', exact: true }).click();
+  await page.getByRole('button', { name: 'From a link' }).click();
+  await page.getByLabel('Content URL').fill('https://mobile.frameflow.test/');
+  await page.getByRole('button', { name: 'Add to library' }).click();
+  const frame = page.frameLocator('iframe.mobile-webpage');
+  await frame.getByLabel('Your name').fill('Frameflow');
+  // Keyboard input avoids Chromium's emulated-viewport hit-testing quirk for scaled OOPIFs.
+  // Native pointer interaction is verified in the non-emulated capture smoke test.
+  await frame.getByRole('button', { name: 'Try me' }).press('Enter');
+  await expect(frame.getByRole('button', { name: 'Clicked' })).toBeVisible();
+  expect(await frame.locator('body').evaluate(() => innerWidth)).toBe(390);
+  await frame.locator('body').evaluate(() => window.scrollTo(0, 1100));
+  expect(await frame.locator('body').evaluate(() => scrollY)).toBeGreaterThan(1000);
+  await page.getByRole('button', { name: 'Connect website capture' }).click();
+  await expect(page.getByRole('button', { name: 'Disconnect capture' })).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator('.recording-canvas')
+        .evaluate((c: HTMLCanvasElement) =>
+          [...c.getContext('2d')!.getImageData(540, 960, 1, 1).data].slice(0, 3),
+        ),
+    )
+    .toEqual([68, 187, 136]);
+  await page.getByRole('button', { name: 'Pen (P)', exact: true }).click();
+  const box = (await page.getByTestId('composition').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.3, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: 'Undo last annotation' })).toBeEnabled();
+  await start(page);
+  await page.waitForTimeout(1200);
+  await page.evaluate(() =>
+    (window as Window & { testWebStream?: MediaStream }).testWebStream
+      ?.getVideoTracks()[0]
+      .dispatchEvent(new Event('ended')),
+  );
+  await expect(page.getByRole('button', { name: 'Resume recording' })).toBeVisible();
+  await page.getByRole('button', { name: 'Resume recording' }).click();
+  await expect(page.getByRole('alert')).toContainText('Reconnect website capture');
+  await page.getByRole('button', { name: 'Finish recording' }).click();
+  await expect(page.getByLabel('Recording preview')).toBeVisible();
 });

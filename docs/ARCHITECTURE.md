@@ -2,7 +2,7 @@
 
 ## The recording contract
 
-The output is an independent canvas, not a screenshot of the editor. Every recorded visual is drawn by `drawComposition`; editor DOM is excluded by construction. Output dimensions never depend on workspace pan/zoom or responsive CSS dimensions.
+The output is an independent canvas, not a screenshot of the editor. Every recorded visual is drawn by `drawComposition`; local-media scenes exclude editor DOM by construction. Live website scenes use an explicit permission-driven Region Capture of the visible output frame, including its iframe and overlay canvas. Output dimensions never depend on workspace pan/zoom or responsive CSS dimensions.
 
 Four coordinate spaces have separate ownership:
 
@@ -11,7 +11,15 @@ Four coordinate spaces have separate ownership:
 3. **Presentation:** a scene’s layer rectangle, contain/cover fit, independent zoom and pan. Output layers and camera positions use normalized coordinates.
 4. **Output:** actual canvas pixels, 1080 × 1920 or 720 × 1280.
 
-`imageRect` is the shared fit/crop transform. Focus Lens edits scene layers, never source asset positions. Each scene owns a deep snapshot of the composition, presenter configuration, annotations, script, and transition. A short crossfade blends a snapshot of the previous output over the next scene.
+`imageRect` is the shared fit/crop transform. Focus Lens edits scene layers, never source asset positions. Each scene owns a deep snapshot of its layers, annotations, script, and transition. An optional project-level presenter configuration is shared across scenes and synchronized into scene camera data for backward compatibility. Older projects without that field adopt the active presenter on the first edit or camera activation. A short crossfade blends a snapshot of the previous output over the next scene.
+
+## Live websites and presenter processing
+
+A real iframe runs in a 390 px viewport, scaled to the visible output layer. Script, form, same-origin storage and popup capabilities are sandboxed; top navigation and access to camera, microphone, location and display capture are excluded. The browser and website enforce frame-ancestors/X-Frame-Options and authentication policies. Switching Interact/Annotate controls pointer routing. Frame-relative annotations do not track cross-origin DOM nodes or page scroll. Iframes remain mounted during scene changes so their live browsing sessions are retained; portable archives store the URL and composition, not website session state.
+
+`useWebCapture` requests tab sharing only after an explicit click. `CropTarget`/`cropTo` narrows the stream to the visible output border. The app validates cropped dimensions before handing the stream to the compositor. In embedded mode the preview canvas draws only local overlay layers, presenter and marks over the live DOM page; it never displays the captured stream, preventing a feedback loop. The recording canvas copies the cropped frame without applying the presenter or annotations twice. Separate-tab mode draws the shared tab as an ordinary visual layer. The microphone/local-media audio graph is unchanged; tab audio is not requested. Sharing loss and opening studio dialogs pause an embedded take. Preflight closes and clears before recording starts.
+
+`PresenterProcessor` bounds background-removal work to one transferred frame at a time in a classic worker. MediaPipe's pinned local model and WASM generate alpha-masked frames at up to 15 fps and a maximum 640-pixel source width; the 30 fps compositor reuses the last complete frame. The worker closes input and replaced output bitmaps. Loading/failure status is surfaced and original camera pixels are never silently substituted while removal is selected.
 
 ## Media and audio ownership
 
@@ -51,6 +59,5 @@ A `.frameflow` file is a ZIP with `project.json` and `media/<blob-key>`. Import 
 - Add another import adapter with its own file validation and renderer support.
 - Add migrations before increasing the project/database schema version.
 - Add native MP4 conversion as an explicit optional module or service; preserve the source file and report progress/errors.
-- Add on-device presenter segmentation only behind a capability/performance check.
 - Move expensive PDF/GIF preprocessing into workers if profiling identifies contention.
 - A native wrapper can reuse project, presentation, scene, and import models while replacing device/encoder bindings.

@@ -1,4 +1,5 @@
-export type AssetKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'article' | 'shape' | 'link';
+export type AssetKind =
+  'image' | 'video' | 'audio' | 'pdf' | 'text' | 'article' | 'shape' | 'link' | 'webpage';
 export type Fit = 'contain' | 'cover';
 export type Point = { x: number; y: number; pressure?: number };
 export type Tool =
@@ -47,6 +48,7 @@ export interface Layer {
   opacity: number;
 }
 export interface CameraConfig {
+  background?: 'original' | 'remove';
   enabled: boolean;
   shape: 'circle' | 'rounded' | 'square' | 'wide';
   x: number;
@@ -79,6 +81,7 @@ export interface Project {
   activeSceneId: string;
   canvas: { x: number; y: number; zoom: number };
   updatedAt: number;
+  presenter?: CameraConfig;
 }
 export type RecordingState = 'idle' | 'starting' | 'recording' | 'paused' | 'stopping';
 export interface Take {
@@ -102,6 +105,7 @@ export const uid = () => crypto.randomUUID();
 export const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 export const clone = <T>(value: T): T => structuredClone(value);
 export const DEFAULT_CAMERA: CameraConfig = {
+  background: 'original',
   enabled: false,
   shape: 'rounded',
   x: 0.65,

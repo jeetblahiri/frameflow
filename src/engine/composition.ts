@@ -1,4 +1,4 @@
-import type { Annotation, Asset, Composition, Layer } from '../model';
+import type { Annotation, Asset, CameraConfig, Composition, Layer } from '../model';
 import type { MediaLibrary } from './media';
 
 export function imageRect(
@@ -56,6 +56,7 @@ function drawLayer(
   W: number,
   H: number,
   media: MediaLibrary,
+  webSource?: HTMLVideoElement,
 ) {
   const x = layer.x * W,
     y = layer.y * H,
@@ -99,18 +100,31 @@ function drawLayer(
       ctx.lineTo(w * 0.65, h * 0.7);
       ctx.stroke();
     } else ctx.fillRect(w * 0.1, h * 0.1, w * 0.8, h * 0.8);
-  } else if (asset.kind === 'link') {
+  } else if (asset.kind === 'webpage' && webSource && webSource.readyState >= 2) {
+    const r = imageRect(webSource.videoWidth, webSource.videoHeight, w, h, 'contain');
+    ctx.drawImage(webSource, r.x, r.y, r.w, r.h);
+  } else if (asset.kind === 'link' || asset.kind === 'webpage') {
     ctx.fillStyle = '#e7e9db';
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#344b3c';
     ctx.font = `${w * 0.055}px sans-serif`;
-    ctx.fillText('LINKED REFERENCE', w * 0.08, h * 0.15);
+    ctx.fillText(
+      asset.kind === 'webpage' ? 'LIVE WEBSITE' : 'LINKED REFERENCE',
+      w * 0.08,
+      h * 0.15,
+    );
     ctx.font = `${w * 0.07}px Georgia,serif`;
     lines(ctx, asset.name, w * 0.84).forEach((s, i) =>
       ctx.fillText(s, w * 0.08, h * 0.3 + i * w * 0.1),
     );
     ctx.font = `${w * 0.032}px sans-serif`;
-    ctx.fillText('Open in the library to view the source.', w * 0.08, h * 0.78);
+    ctx.fillText(
+      asset.kind === 'webpage'
+        ? 'Connect website capture to include this page.'
+        : 'Open in the library to view the source.',
+      w * 0.08,
+      h * 0.78,
+    );
   } else if (asset.kind === 'audio') {
     media.ensure(asset);
     ctx.fillStyle = '#1b3438';
@@ -215,36 +229,48 @@ export function drawComposition(
   composition: Composition,
   assets: Asset[],
   media: MediaLibrary,
-  camera?: HTMLVideoElement,
+  camera?: HTMLVideoElement | HTMLCanvasElement | ImageBitmap,
+  options?: { overlayOnly?: boolean; webSource?: HTMLVideoElement; capturedFrame?: boolean },
 ) {
   const W = ctx.canvas.width,
     H = ctx.canvas.height;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = composition.background;
-  ctx.fillRect(0, 0, W, H);
+  if (options?.capturedFrame && options.webSource && options.webSource.readyState >= 2) {
+    // Region Capture already includes the on-screen presenter and annotations exactly once.
+    ctx.drawImage(options.webSource, 0, 0, W, H);
+    return;
+  }
+  if (!options?.overlayOnly) {
+    ctx.fillStyle = composition.background;
+    ctx.fillRect(0, 0, W, H);
+  }
   for (const layer of composition.layers) {
     const asset = assets.find((a) => a.id === layer.assetId);
-    if (asset) drawLayer(ctx, asset, layer, W, H, media);
+    if (asset && !(options?.overlayOnly && asset.kind === 'webpage'))
+      drawLayer(ctx, asset, layer, W, H, media, options?.webSource);
   }
   const c = composition.camera;
-  if (c.enabled && camera && camera.readyState >= 2) {
+  if (c.enabled && camera && (!(camera instanceof HTMLVideoElement) || camera.readyState >= 2)) {
+    const sw = camera instanceof HTMLVideoElement ? camera.videoWidth : camera.width;
+    const sh = camera instanceof HTMLVideoElement ? camera.videoHeight : camera.height;
     const w = W * c.size,
-      h = c.shape === 'wide' ? w * 0.5625 : c.shape === 'rounded' ? w * 1.25 : w;
+      h = cameraHeight(c, sh / sw) * H;
     const x = W * c.x,
       y = H * c.y;
     ctx.save();
-    ctx.shadowColor = '#0008';
+    const cutout = c.background === 'remove';
+    ctx.shadowColor = cutout ? 'transparent' : '#0008';
     ctx.shadowBlur = 28;
     ctx.shadowOffsetY = 10;
     ctx.beginPath();
     if (c.shape === 'circle') ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
     else ctx.roundRect(x, y, w, h, c.shape === 'rounded' ? W * 0.03 : 0);
     ctx.fillStyle = c.border;
-    ctx.fill();
+    if (!cutout) ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.clip();
+    if (!cutout) ctx.clip();
     ctx.filter = c.blur ? `blur(${c.blur}px)` : 'none';
-    const r = imageRect(camera.videoWidth, camera.videoHeight, w, h, 'cover');
+    const r = imageRect(sw, sh, w, h, 'cover');
     ctx.translate(x, y);
     if (c.mirror) {
       ctx.translate(w, 0);
@@ -252,7 +278,7 @@ export function drawComposition(
     }
     ctx.drawImage(camera, r.x, r.y, r.w, r.h);
     ctx.restore();
-    if (c.border) {
+    if (c.border && !cutout) {
       ctx.save();
       ctx.strokeStyle = c.border;
       ctx.lineWidth = W * 0.004;
@@ -270,4 +296,18 @@ export function drawComposition(
     ctx.font = `500 ${W * 0.021}px sans-serif`;
     ctx.fillText('MADE WITH FRAMEFLOW', W * 0.07, H * 0.96);
   }
+}
+
+/** Normalized frame height, shared by rendering and presenter hit testing. */
+export function cameraHeight(camera: CameraConfig, sourceAspect = 9 / 16) {
+  return (
+    ((camera.size * 9) / 16) *
+    (camera.background === 'remove'
+      ? sourceAspect
+      : camera.shape === 'wide'
+        ? 0.5625
+        : camera.shape === 'rounded'
+          ? 1.25
+          : 1)
+  );
 }

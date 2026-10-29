@@ -6,12 +6,20 @@ Validated on 29 October 2026. This release is prepared for static HTTPS deployme
 
 - Strict TypeScript compilation: pass.
 - Production static build: pass. The app and bundled assets also load beneath a `/frameflow/` repository subpath.
-- Nineteen unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
-- Twelve production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
+- Twenty-one unit tests: pass, including shape-outline erasing, project schema validation and bounded archive expansion.
+- Fourteen production browser workflow tests: pass in Brave 154.1.96.61 / Chromium 154 on macOS, with simulated camera and a generated WAV microphone input.
 - Desktop visual inspection at 1440 × 960: pass; screenshot in `docs/studio.png`.
 - Viewport checks at 1024 × 768, 768 × 1024, and 390 × 844: output remains 9:16, no horizontal document overflow, annotation controls work. These use a desktop engine and pointer input, not Safari or Apple Pencil.
 
 The newest local Chrome 156 / Playwright browser had a native rendering stall even on a minimal standalone screenshot. The workflow suite used the installed Brave browser after a successful baseline check. The repository pins a stable Playwright release for reproducible CI installation. Local production workflows run against the compiled app at `/frameflow/` with the actual production CSP enforced. GitHub-hosted CI/deployment status must be checked separately after upload.
+
+## Live website and presenter checks
+
+- The studio starts with the content library, canvas board and inspector closed. Each is reachable from the navigation bar.
+- Shared presenter settings retain enabled state, position, scale and cutout mode through scene changes and reload. A pixel regression checks that camera pixels remain in the next scene.
+- The production background-removal worker loads its local WASM/model under the enforced CSP. A real sample portrait smoke check retained the person and produced transparent background pixels; no camera uploads occur.
+- A controlled live website confirms a 390 px inner viewport, form input, button interaction, page scrolling, annotation switching, capture compositing, and pause on sharing loss. Automated permission/stream behavior is deterministic; native Region Capture was additionally checked in a visible Brave/Chromium window, with the scrolled page color verified in the recording canvas. Element Capture was rejected after native testing produced stale whole-tab frames; the final implementation uses the verified Region Capture path.
+- Actual website compatibility depends on the site's embedding policy and responsive CSS. Mobile user-agent emulation, scroll-anchored DOM annotations, website audio, physical-device cutout quality and long-session thermal behavior are not claimed.
 
 ## Production hardening
 
@@ -39,7 +47,7 @@ The newest local Chrome 156 / Playwright browser had a native rendering stall ev
 | Visual changes preserve recording       | Scene navigation, annotation, pause, and resume all occur during one take                                                                                                                |
 | Output is playable and vertical         | Native video element decodes the result; ffprobe confirms H.264, 1080 × 1920, DAR 9:16 and AAC stereo at 44.1 kHz in the tested browser                                                  |
 | Native export and trim                  | Original and trimmed downloads complete; original take remains stored                                                                                                                    |
-| Error feedback                          | Denied microphone access is surfaced with browser permission guidance; external URL imports use explicit reference-card fallback                                                         |
+| Error feedback                          | Denied microphone access is surfaced with browser permission guidance; webpage recording requires explicit tab permission; capture loss pauses a take                                    |
 | Persistence and portability             | Source metadata survives reload, and archive roundtrip restores imported media and scenes                                                                                                |
 | Recovery                                | Reload during recording exposes saved chunks and produces a recovered take                                                                                                               |
 | Physical iPad core workflow             | **Pending real-device validation**                                                                                                                                                       |
@@ -67,8 +75,8 @@ Before describing the app as iPad validated, record the exact device model, iPad
 
 - MP4 uses browser-native encoding only. There is no cross-browser MP4 conversion service.
 - Browser-level recording and background suspension behavior cannot be overridden.
-- Third-party players and live webpages are safe references, not unrestricted audiovisual sources. Import a permitted local file or visual/text snapshot.
+- Live webpages use a 390 px responsive iframe. Embedded recording needs desktop Chromium Region Capture and tab-sharing permission. Sites may refuse embedding; separate-tab sharing is available, with interaction in the source tab. Marks remain fixed to the frame. Tab audio is not included.
 - PPTX imports text; PDF preserves presentation visuals.
-- Background segmentation/removal and automatic captions are not bundled.
+- Presenter background removal is bundled and processed locally at up to 15 fps; automatic captions are not included.
 - GIF decoding is bounded to avoid unbounded live-animation memory. Large animations should be converted to local video.
 - Storage recovery is best effort, dependent on written chunks and container recoverability. Download important takes and project archives.

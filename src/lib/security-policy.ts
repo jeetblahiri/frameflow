@@ -9,7 +9,7 @@ export const contentSecurityPolicy = [
   "worker-src 'self' blob:",
   "connect-src 'self' blob: data: https: http:",
   "object-src 'none'",
-  "frame-src 'none'",
+  'frame-src https: http:',
   "base-uri 'self'",
   "form-action 'self'",
 ].join('; ');

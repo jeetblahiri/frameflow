@@ -1,6 +1,6 @@
 # Security and data boundaries
 
-The studio is a local-first browser application. It does not send imported project files, camera frames, microphone audio or recordings to an application server. An explicit URL import contacts the chosen source with credentials omitted. There is no analytics or account backend.
+The studio is a local-first browser application. It does not send imported project files, camera frames, microphone audio or recordings to an application server. Direct media URL imports use credentials omitted. Live webpage URLs load in a sandboxed iframe; the source site may receive normal browser cookies subject to browser third-party cookie rules. Live recording requests explicit tab-sharing permission and crops to the output frame; tab audio is not requested. Camera segmentation uses a local worker, WASM and model. There is no analytics or account backend.
 
 The production build includes a Content Security Policy, local PDF workers/fonts/decoders, self-contained SVG restrictions, bounded ZIP decompression, complete project-model validation and isolated media keys for project imports. Recording chunks and recovery metadata are committed together in IndexedDB transactions. Failed native encoder starts clear only their own empty recovery state.
 

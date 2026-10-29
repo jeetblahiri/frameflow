@@ -206,6 +206,8 @@ export async function importFile(file: File): Promise<Asset[]> {
 }
 export async function importUrl(input: string): Promise<Asset[]> {
   const url = new URL(input);
+  if (url.username || url.password)
+    throw new Error('Use a website URL without embedded credentials.');
   if (!['https:', 'http:'].includes(url.protocol))
     throw new Error('Use a complete HTTP or HTTPS link.');
   if (/\.(png|jpe?g|webp|gif|svg|pdf|mp4|webm|mp3)(\?|$)/i.test(url.pathname)) {
@@ -227,11 +229,11 @@ export async function importUrl(input: string): Promise<Asset[]> {
   return [
     {
       id: uid(),
-      kind: 'link',
+      kind: 'webpage',
       name: (url.hostname.replace(/^www\./, '') + url.pathname.slice(0, 80)).slice(0, 120),
       url: url.href,
-      width: 1080,
-      height: 1500,
+      width: 390,
+      height: 693,
       x: 120,
       y: 120,
       boardWidth: 240,

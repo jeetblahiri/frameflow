@@ -1,7 +1,7 @@
 {
   "name": "frameflow-studio",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "A local-first spatial studio for continuous vertical video recording.",
   "scripts": {
@@ -21,6 +21,7 @@
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",
     "@fontsource/manrope": "^5.3.0",
+    "@mediapipe/tasks-vision": "^0.10.32",
     "gifuct-js": "^2.1.2",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",
