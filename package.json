@@ -1,0 +1,54 @@
+{
+  "name": "frameflow-studio",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "A local-first spatial studio for continuous vertical video recording.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "check": "tsc -b --pretty false",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "format": "prettier --write src scripts tests *.ts *.json *.html *.md docs .github",
+    "predev": "node scripts/copy-pdf-assets.mjs",
+    "prebuild": "node scripts/copy-pdf-assets.mjs",
+    "test:production": "node scripts/test-production.mjs",
+    "serve:production": "node scripts/serve-built.mjs",
+    "format:check": "prettier --check src scripts tests *.ts *.json *.html README.md CONTRIBUTING.md docs/ARCHITECTURE.md docs/VALIDATION.md .github"
+  },
+  "dependencies": {
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "gifuct-js": "^2.1.2",
+    "idb": "^8.0.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "6.4.299",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.0",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeetblahiri/frameflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jeetblahiri/frameflow/issues"
+  },
+  "homepage": "https://jeetblahiri.github.io/frameflow/"
+}

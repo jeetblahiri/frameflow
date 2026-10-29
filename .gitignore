@@ -1,0 +1,14 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+coverage/
+
+.cache/
+
+public/pdf-assets/
